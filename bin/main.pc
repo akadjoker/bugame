@@ -1,0 +1,32 @@
+program teste;
+
+process bunny(_x,_y)
+{
+    x=mouse_x();
+    y=mouse_y();
+
+    loop
+    {
+        x = x + 1;
+        if (x >800)
+        {
+            x=0;
+        }
+    }
+}
+
+bunny(20,20);
+var i=0;
+loop
+{
+      bunny(200,50);
+
+        for(i=0;i<100;i=i+1)
+        {
+        bunny(200,50);
+        }
+   
+
+}
+
+print("end prgram");
