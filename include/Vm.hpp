@@ -8,7 +8,7 @@ class VirtualMachine;
 
 enum OpCode
 {
-    NONE = 0,
+    ZERO = 0,
     PUSH,
     POP,
     CONST,
@@ -17,6 +17,7 @@ enum OpCode
     PRINT,
     NOW,
     FRAME,
+    PROGRAM,
 
     ADD,
     SUBTRACT,
@@ -34,20 +35,26 @@ enum OpCode
     GREATER_EQUAL,
     LESS_EQUAL,
 
+    TRUE,
+    FALSE,
     NOT,
+    AND,
+    OR,
     XOR,
     INC,
     DEC,
     SHL,
     SHR,
 
-    ENTER_SCOPE,
-    EXIT_SCOPE,
 
 
-    VARIAVEL_DEFINE,
-    VARIAVEL_GET,
-    VARIAVEL_ASSIGN,
+    GLOBAL_DEFINE,
+    GLOBAL_GET,
+    GLOBAL_ASSIGN,
+
+    
+    LOCAL_GET,
+    LOCAL_SET,
 
 
 
@@ -72,55 +79,67 @@ enum OpCode
     CALL_PROCESS,
     RETURN_DEF,
     RETURN_PROCESS,
-    RETURN_NATIVE,
+
     
     NIL,
 
     JUMP,
     JUMP_IF_FALSE,
     JUMP_IF_TRUE,
-    TOTAL
+    COUNT,
 };
-
-
-static const int RUNNING = 0;
-static const int FINISHED = 1;
-static const int ABORTED = 2;
-static const int EMPTY = 3;
-static const int TERMINATED = 4;
-
 
 class Task;
 
 
 
-#define FRAMES_MAX 64
-#define STACK_MAX 1024
+#define MAX_FRAMES 64
+#define STACK_MAX (MAX_FRAMES * UINT8_MAX)
 
 
+static const int RUNNING = 0;
+static const int FINISHED = 1;
+static const int ABORTED = 2;
+static const int TERMINATED = 3;
+static const int OK = 4;
 
 
 struct Scope 
 {
-    String name;
-    Scope *parent;
+
+
     int level;
     HashTable<Value> variables;
     Scope();
-    Scope(const char *name, Scope *parent, int level);
+    Scope( int level);
     virtual ~Scope();
     bool define(const char *name, Value value);
-    bool add(const char *name, Value value);
+    void insert(const char *name, Value value);
     bool get(const char *name, Value &value);
     bool contains(const char* name) const;
     bool assign(const char* name, Value value);
-    
-    void  write(const char *name, Value value);
-    bool  read(const char *name, Value &value);
+
 
     void print();
     void clear();
 };
+
+struct  Local
+{
+    char name[128]{'\0'};
+    u32 len;
+    int depth;
+    bool isArg;
+} ;
+
+struct Frame
+{
+    Task  *task;
+    u8    *ip;
+    Value *slots;
+};
+
+
 
 class Task : public Traceable
 {
@@ -128,76 +147,53 @@ private:
     friend class VirtualMachine;
     friend class Parser;
 
-    u8 codeType{0};
-    Vector<u8> code;
+    bool PanicMode;
 
     
-    Vector<Value> constants;
-    Vector<String> args;
-
-
-    Vector<int> lines;
     
+    
+    Vector<u8> codes;
+
+    int loopStart{-1};
+    int exitJump{-1};
+
+    int breakJumpCount{-1};
+    int breakJumps[UINT8_MAX]{-1};
+    int frameDepth;
 
     
-
-
-    
-
-    s32 loopStart{-1};
-    s32 loopEnd{-1};
-    s32 exitJump{-1};
-    s32 currentContinueJump{-1};
-    s32 currentBreakJump{-1};
-    u32 frameDepth;
-    
-
 
 
     Value stack[STACK_MAX];
     Value* stackTop;
 
-    int *line;
-    int *lastLine;
-    u8 *ip;
-    u8 state;
-    u8 *lastIP;
+    int scopeDepth;
 
+    bool mainTask;
+
+
+ 
     u8 argsCount;
 
-    void exitScope();
 
-    void setBegin();
-    void setLoop();
-    void setEnd();
 
-    bool  push(Value v);
+    void beginScope();
+    void exitScope(int line);
+    
+    bool push(Value v);
     Value pop();
     Value peek(int offset = 0);
-    void  pop(u32 count);
     Value top();
+    void pop(u32 count);
+    void PrintStack();
 
-    int read_line();
+   // u8 read_byte();
+   //u16 read_short();
 
-
-    u8 read_byte();
-    u16 read_short();
-    
-
-    s32 innermostLoopStart = {-1};
-    u32 innermostLoopScopeDepth = {0};
- 
-
-
-    Value read_const();
-    Value read_const(int index);
-    
-
-
-    u32 makeConstant( Value value);
+    u8 makeConstant( Value value);
     void writeByte(u8 byte, int line);
     void writeBytes(u8 byte1, u8 byte2,int line);
-    void writeConstant(const Value &value,int line);
+    void writeConstant( Value value,int line);
     
     void writeConstantVar(const char *name, Value value, int line);
 
@@ -208,60 +204,83 @@ private:
     u32 byteInstruction(const char *name, u32 offset);
     u32 jumpInstruction(const char *name, u32 sign, u32 offset);
     u32 varInstruction(const char *name, u32 offset);
-    void PrintStack();
 
+    
 
+    
 
-    void patch(u32 offset);
-    void addToInPlaceJumpOffsetList(int offset, int jumpAddress);
+    u8 op_add();
+    u8 op_mod(int line);
+    u8 op_not_equal();
+    u8 op_less();
+    u8 op_greater();
+    u8 op_less_equal();
+    u8 op_greater_equal();
+    u8 op_xor();
 
-    void go_to(int offset, u32 jumpAddress);
-    void patchBreaks(int breakJump);
-
-    u32 code_size();
+   
 
 protected:
     String name;
     u64 ID;
-    Scope local;
+    Frame frames[MAX_FRAMES];
+    int frameCount;
+    Local locals[UINT8_MAX];
+    int localCount;
+    
     bool m_done;
     Task *parent;
     VirtualMachine *vm;
+    bool is_main;
+    bool isReturned;
+    Chunk *chunk;
+    Vector<Value> constants;
+
+    int declareVariable(const String &string,bool isArg=false);
+    int addLocal(const char* name,u32 len,bool isArg=false);
+    int resolveLocal(const String &string);
+    bool setLocalVariable(const String &string, int index);
+    void set_process();
 
 public:
     Task(VirtualMachine *vm, const char *name);
     virtual ~Task();
 
-    void reset();
+    void init_frames();
 
-    u8 processBegin();
-    u8 processLoop();
-    u8 processEnd();
+   
+    u8 Run();
+    void write_byte(u8 byte, int line);
 
-    void write_byte(u32 byte, int line);
+    
 
-    bool addArgs(const String &name);
-
-    u32 addConst(Value v);
-    u32 addConstString(const char *str);
-    u32 addConstNumber(double number);
+    u8 addConst(Value v);
+    u8 addConstString(const char *str);
+    u8 addConstNumber(double number);
 
     virtual void create(){};
     virtual void remove(){};
     virtual void update(){};
 
-    u32 Run();
-    u32 Run(u32 instruction, u32 line);
-    u32 Process();
-
     bool IsDone();
     void Done();
+    bool IsMain() const { return is_main; }
 
 };
 
-const int IX = 0;
-const int IY = 1;
-const int IGRAPH = 2;
+
+struct FunctionObject : public Task
+{
+    int arity;
+    
+    FunctionObject(VirtualMachine *vm, const char *name);
+    
+};
+
+const int IID    = 0;
+const int IX     = 1;
+const int IY     = 2;
+const int IGRAPH = 3;
 
 
 struct Instance 
@@ -289,18 +308,25 @@ class Process : public Task
 {
 
 protected:
-    Value x;
-    Value y;
-    Value graph;
     bool isCreated;
-    u32 frames;
+    
+    Process *bigBrother;
+    Process *smallBrother;
+    Process *son;
+    Process *father;
+    
+    
 
 public:
     Process(VirtualMachine *vm, const char *name);
     ~Process();
+    void set_parent(Process *p);
     void create() override;
     void update() override;
     void remove() override;
+
+    void set_defaults();
+    void set_variable(const String &name, Value value);
     Instance instance;
 };
 
@@ -325,39 +351,47 @@ class VirtualMachine
     friend class Task;
     friend class Lexer;
     friend class Parser;
+    friend class ScopeStack;
 
     Parser parser;
 
     Vector<Task *> taskes;
     HashTable<Task *> taskesMap;
     HashTable<NativeFunctionObject *> nativeFunctions;
-    HashTable<Value> scriptFunctions;
+    Vector<FunctionObject*> scriptFunctions;
+    HashTable<FunctionObject *> functionsMap;
+
+
     Scope *global;
 
-
+    static Value DEFAULT;
 
     Task *mainTask;
     Task *currentTask;
     
-    int scopeDepth;
-   
+
    
 
     bool panicMode;
     bool isHalt;
     bool isDone;
 
-    Value addFunction(const char *name, int arity);
+    FunctionObject* newFunction(const char *name);
+    bool getFunction(const char *name,FunctionObject **func);
+
+
 
     Task *newTask(const char *name);
     Task *getCurrentTask();
     Task *getTask(const char *name);
 
     Task *addTask(const char *name);
+    
     Process *AddProcess(const char *name);
 
     void setMainTask();
     void switchTask(Task *task);
+    void setCurrentTask(Task *task);
 
     void Error(const char *format, ...);
     void Warning(const char *format, ...);
@@ -365,19 +399,14 @@ class VirtualMachine
 
     int callNativeFunction(const char *name, Value *args, u8 argCount);
 
-    bool RunTask();
+    u8 RunTask();
 
 
-    void beginScope();
-    void endScope();
 
-    int  getScopeDepth();
     bool isGlobalScope();
 
     List run_process;
 
-    void op_add(Task *task,int line);
-    void op_sub(Task *task,int line);
 
     
 
@@ -387,22 +416,31 @@ public:
     
     void Clear();
     
-    bool Run();
+    u8 Run();
     bool Compile(String source);
     bool IsReady();
     bool Update();
-
 
 
     Task *getMainTask();
     void disassemble();
 
     void registerFunction(const char *name, NativeFunction func, size_t arity);
+    bool registerVariable(const char *name, Value value);
+    bool registerNumber(const char *name, double value);
+    bool registerInteger(const char *name, int value);
+    bool registerString(const char *name, const char *value);
+    bool registerBoolean(const char *name, bool value);
+    bool registerNil(const char *name);
+    bool ContainsVariable(const char *name);
 
-    bool push(Value v);
+
+    bool  push(Value v);
     Value pop();
     Value peek(int offset = 0);
+    void  pop(u32 count);
     Value top();
+
 
     bool push_int(int value);
     bool push_double(double value);

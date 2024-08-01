@@ -33,6 +33,11 @@ static inline bool matchString(const char *str1, const char *str2,size_t bLen)
     
 }
 
+static inline size_t  GROW_CAPACITY(size_t capacity)
+{
+    return ((capacity) < 8 ? 8 : (capacity) * 2);
+}
+
 static inline double time_now()
 {
     //  auto now = std::chrono::high_resolution_clock::now();

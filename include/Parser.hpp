@@ -23,8 +23,7 @@ private:
     HashTable<u16> functions;
     HashTable<u16> process;
     Vector<Token> tokens;
-    
-
+    HashTable<u32> globals;
 
     int current;
     bool panicMode;
@@ -78,7 +77,7 @@ private:
     // statmns
     void program();
     void declaration();
-    void defDeclaration();
+
     void functionDeclaration();
     void processDeclaration();
     void statement();
@@ -102,7 +101,7 @@ private:
     u8 argumentList(bool canAssign);
     void callProcess();
 
-    u32 makeConstant(const Value &value);
+    u8 makeConstant(const Value &value);
     void emitByte(u8 byte);
     void emitBytes(u8 byte1, u8 byte2);
     void emitReturn();
@@ -111,9 +110,17 @@ private:
     int  emitJump(u8 instruction);
     int  jumpSize(u8 instruction);
     void patchJump(int offset);
-    void endLoop();
-    
 
+    void endLoop();
+
+    void patchBreakJumps();
+    void patchContinueJumps();
+
+    int scopeLevel{0};
+    void scopeEnter();
+    void scopeExit();
+    
+    bool IsGlobalScope();
     Task *currentTask;
     bool hasReturned;///dummy , but needed 4 now
 

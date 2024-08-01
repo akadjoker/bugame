@@ -6,8 +6,9 @@
 
 void Parser::setTask(Task *currentTask)
 {
-    this->currentTask->setBegin();
+    
     this->currentTask = currentTask;
+    vm->setCurrentTask(currentTask);
 }
 
 Parser::Parser()
@@ -37,7 +38,7 @@ bool Parser::Load(String text)
     if( lexer.Load(std::move(text)))
     {
         tokens = std::move(lexer.process());
-        Print();
+       // Print();
         return true;
     }
     return false;
@@ -122,6 +123,10 @@ Token Parser::consume(TokenType type, const String &message)
     }
     else
     {
+        if (current >= (int)tokens.size())
+            current = tokens.size() - 1;
+        else if (current<=0)
+            current = 0;
         Error(tokens[current], message + " have '" + tokens[current].lexeme + "'");
         return Token::errorToken();
     }
@@ -143,9 +148,11 @@ bool Parser::isAtEnd()
         return true;
     if (panicMode)
         return true;
-   // return tokens[current].type == TokenType::END_OF_FILE;
+   
 
-    return false;
+    return tokens[current].type == TokenType::END_OF_FILE;
+
+   
 }
 
 void Parser::synchronize()
@@ -184,7 +191,7 @@ Token Parser::peek()
 
 Token Parser::previous()
 {
-    if (current == 0)
+    if (current < 1)
     {
         return Token::errorToken();
     }
@@ -237,7 +244,7 @@ void Parser::Warning(const Token &token, const String &message)
 }
 //************************************************************************************************************* */
 
-u32 Parser::makeConstant(const Value &value)
+u8 Parser::makeConstant(const Value &value)
 {
 
     int constant = (int)currentTask->addConst(value);
@@ -248,7 +255,9 @@ u32 Parser::makeConstant(const Value &value)
         return 0;
     }
 
-    return (u32)constant;
+    
+
+    return (u8)constant;
 }
 
 void Parser::emitByte(u8 byte)
@@ -256,6 +265,8 @@ void Parser::emitByte(u8 byte)
     int line = previous().line;
     currentTask->write_byte(byte, line);
 }
+
+
 
 void Parser::emitBytes(u8 byte1, u8 byte2)
 {
@@ -276,11 +287,10 @@ void Parser::emitConstant(const Value &value)
 void Parser::emitLoop(int loopStart)
 {
     emitByte(OpCode::JUMP_BACK);
-
-    int offset = currentTask->code_size() - loopStart + 2;
+    int offset = currentTask->chunk->count - loopStart + 2;
     if (offset > UINT16_MAX)
     {
-        vm->Error("[EMIT LOOP] Loop offset overflow");
+        vm->Error("Loop offset overflow");
         panicMode = true;
         return;
     }
@@ -293,13 +303,47 @@ int Parser::emitJump(u8 instruction)
     emitByte(instruction);
     emitByte(0xff);
     emitByte(0xff);
-    return currentTask->code_size() - 2;
+   // printf("emit jump %d\n", currentTask->chunk.count - 2);
+    return currentTask->chunk->count - 2;
 }
+
 
 
 void Parser::patchJump(int offset)
 {
-    currentTask->patch(offset);
+    int jump = (int)currentTask->chunk->count - offset - 2;
+
+    if (jump > UINT16_MAX)
+    {
+        vm->Error("Too much code %d to jump over %d->", jump, currentTask->chunk->count);
+        return;
+    }
+
+    currentTask->chunk->code[offset] = (jump >> 8) & 0xff;
+    currentTask->chunk->code[offset + 1] = jump & 0xff;
+}
+
+void Parser::scopeEnter()
+{
+     scopeLevel++;
+     currentTask->beginScope();
+}
+
+void Parser::scopeExit()
+{
+    scopeLevel--;
+    currentTask->exitScope(previous().line);
+}
+
+
+
+
+bool Parser::IsGlobalScope()
+{
+    if(currentTask->IsMain() && scopeLevel == 0)
+        return true;
+
+    return false;
 }
 
 //************************************************************************************************************* */
@@ -327,32 +371,41 @@ bool Parser::Process()
         vm->Error("No current task");
         return false;
     }
+  //  Print();
     program();
-    if (panicMode)
-        return false;
-
-
-    emitReturn();
-    return true;
+    return !panicMode;
 }
 
 void Parser::program()
 {
+    
     consume(TokenType::PROGRAM,"Expect 'program' at the beginning.");
     Token name = consume(TokenType::IDENTIFIER,"Expect program name after 'program'.");
     String nameStr = name.literal;
     consume(TokenType::SEMICOLON,"Expect ';' after program name.");
 
+    u8 index = makeConstant(std::move(STRING(nameStr.c_str())));
+    emitBytes(OpCode::PROGRAM, index);
+    
     while (!isAtEnd())
     {
         declaration();
+        if (panicMode)
+            return;
     }    
+    
+    emitByte(OpCode::NIL);
+    emitReturn();
+    
+    
+    
     
 }
 
 void Parser::expression(bool canAssign)
 {
     expr_or(canAssign);
+            
     if (canAssign && match(TokenType::EQUAL))
     {
         Error("Invalid assignment target.");
@@ -365,12 +418,12 @@ void Parser::expr_or(bool canAssign)
     expr_and(canAssign);
     while (match(TokenType::OR))
     {
-
-        // short circuit
+  // short circuit
         int elseJump = emitJump(OpCode::JUMP_IF_FALSE);
         int endJump = emitJump(OpCode::JUMP);
 
         patchJump(elseJump);
+        emitByte(OpCode::POP);
 
         expr_and(canAssign);
         patchJump(endJump);
@@ -385,10 +438,10 @@ void Parser::expr_and(bool canAssign)
     {
 
         int endJump = emitJump(OpCode::JUMP_IF_FALSE);
-
+        emitByte(OpCode::POP);
         expr_xor(canAssign);
-
         patchJump(endJump);
+        
     }
 }
 
@@ -556,15 +609,15 @@ void Parser::primary(bool canAssign)
     }
     else if (match(TokenType::TRUE))
     {
-        emitConstant(BOOLEAN(true));
+        emitByte(OpCode::TRUE);
     }
     else if (match(TokenType::FALSE))
     {
-        emitConstant(BOOLEAN(false));
+        emitByte(OpCode::FALSE);
     }
     else if (match(TokenType::NIL))
     {
-        emitConstant(NONE());
+        emitByte(OpCode::NIL);
     }
     else if (match(TokenType::IDENTIFIER))
     {
@@ -616,8 +669,7 @@ void Parser::declaration()
 
 void Parser::functionDeclaration()
 {
-
-
+    
     Token name = consume(TokenType::IDFUNCTION, "Expect function name.");
     consume(TokenType::LEFT_PAREN, "Expect '(' after function name.");
 
@@ -630,27 +682,29 @@ void Parser::functionDeclaration()
         return;
     }
 
+    Task *defaultTask = currentTask;
+    FunctionObject *task = vm->newFunction(rawName);
+    setTask(task); 
+  //  scopeEnter();
+
    
 
     
 
-    Task *defaultTask = currentTask;
-    Task *task = vm->newTask(rawName);
-    setTask(task);
-    emitByte(OpCode::ENTER_SCOPE);
-    hasReturned = false;
+    
 
+    hasReturned = false;
+    task->argsCount = 0;
+    task->declareVariable(rawName, true);
 
     if (!match(TokenType::RIGHT_PAREN))
     {
         do
         {
             Token name = consume(TokenType::IDENTIFIER, "Expect parameter name");
-            if (!task->addArgs(name.lexeme))
-            {
-                vm->Error("Function '%s' already has argument '%s'", rawName, name.lexeme.c_str());
-                return;
-            }
+            task->declareVariable(name.lexeme, true);
+            task->argsCount++;
+      
             
         } while (match(TokenType::COMMA));
     }
@@ -662,8 +716,7 @@ void Parser::functionDeclaration()
 
 
     block();
-
-  //  consume(TokenType::RIGHT_BRACE, "Expect '}' after function body.");
+ 
 
     Token prev = previous();
     if (previous().type == TokenType::RIGHT_BRACE && !hasReturned)
@@ -674,12 +727,12 @@ void Parser::functionDeclaration()
         vm->Warning("Function '%s' without return value!", name.lexeme.c_str());
     }
 
-    
-    emitByte(OpCode::EXIT_SCOPE);
-    setTask(defaultTask);
-    vm->setMainTask();
+    task->arity = task->argsCount;
 
+ //   scopeExit();
+    setTask(defaultTask);
     hasReturned = false;
+    
 
    // INFO("Function: %s", name.lexeme.c_str());
 }
@@ -704,20 +757,26 @@ void Parser::processDeclaration()
 
     Task *defaultTask = currentTask;
     Task *task = vm->newTask(rawName);
+    task->chunk = new Chunk(128);
+    task->set_process();
     setTask(task);
-    emitByte(OpCode::ENTER_SCOPE);
+    
+  //  scopeEnter();
+
     hasReturned = false;
+    task->argsCount = 0;
+    task->declareVariable(rawName, true);
+    
+
 
     if (!match(TokenType::RIGHT_PAREN))
     {
         do
         {
             Token name = consume(TokenType::IDENTIFIER, "Expect parameter name");
-            if (!task->addArgs(name.lexeme))
-            {
-                vm->Error("Process '%s' already has argument '%s'", rawName, name.lexeme.c_str());
-                return;
-            }
+            task->declareVariable(name.lexeme, true);
+            task->argsCount++;
+          
             
         } while (match(TokenType::COMMA));
     }
@@ -732,12 +791,14 @@ void Parser::processDeclaration()
 
 
     
-    emitByte(OpCode::EXIT_SCOPE);
+   // scopeExit();
     emitByte(OpCode::RETURN_PROCESS);
     setTask(defaultTask);
-    vm->setMainTask();
 
-   //     INFO("Process: %s", name.lexeme.c_str());
+
+    
+
+  //  INFO("Process: %s", name.lexeme.c_str());
 }
 
 void Parser::statement()
@@ -783,9 +844,13 @@ void Parser::statement()
     }
     else if (match(TokenType::LEFT_BRACE))
     {
-     //   emitByte(OpCode::ENTER_SCOPE);
+       
+        scopeEnter();
         block();
-      //  emitByte(OpCode::EXIT_SCOPE);
+        scopeExit();
+        
+       
+       
     }
     else
     {
@@ -839,64 +904,11 @@ void Parser::printStatement()
 void Parser::variableDeclaration()
 {
 
-    // Token next = lookAhead();
-    // if (next.type == TokenType::COMMA)
-    // {
+   
 
-    //     Vector<u32> variableIndices;
-    //     do
-    //     {
-
-    //         Token name = consume(TokenType::IDENTIFIER, "Expect variable name");
-    //         Value value = STRING(name.lexeme);
-    //         u32 index = makeConstant(std::move(value));
-    //         variableIndices.push_back(index);
-    //     } while (match(TokenType::COMMA));
-
-    //     if (match(TokenType::EQUAL))
-    //     {
-    //         expression();
-    //     }
-    //     else
-    //     {
-    //         emitConstant(NONE());
-    //     }
-
-    //     emitConstant(NUMBER(static_cast<double>(variableIndices.size())));
-    //     emitConstant(NUMBER(static_cast<double>(variableIndices[0])));
-    //     emitBytes(OpCode::GLOBAL_MULTIPLE_DEFINE, variableIndices.size());
-
-
-    // } else 
-    // {
-
-    //         Token name = consume(TokenType::IDENTIFIER, "Expect variable name");
-    //         Value value = STRING(name.lexeme);
-    //         u32 index = makeConstant(std::move(value));
-    //         if (match(TokenType::EQUAL))
-    //         {
-
-    //             expression();
-    //         }
-    //         else
-    //         {
-    //             emitConstant(NONE());
-    //         }
-
-    //         emitBytes(OpCode::GLOBAL_DEFINE, index);
-        
-            
-
-    // }
-
-    
-
-    
-    
-
+    bool global = IsGlobalScope();
     Token name = consume(TokenType::IDENTIFIER, "Expect variable name");
-    Value value = STRING(name.lexeme);
-    u32 index = makeConstant(std::move(value));
+    
     if (match(TokenType::EQUAL))
     {
 
@@ -904,24 +916,92 @@ void Parser::variableDeclaration()
     }
     else
     {
-        emitConstant(NONE());
+        emitByte(OpCode::NIL);//no value set nil
     }
 
-    emitBytes(OpCode::VARIAVEL_DEFINE, index);
     consume(TokenType::SEMICOLON, "Expect ';' after variable declaration");
+
+    if (global)
+    {
+        Value value = STRING(name.lexeme);
+        if (globals.contains(name.lexeme.c_str()))
+        {
+            Error("Global variable '" + name.lexeme+ "' already declared.");
+            return;
+        }
+        
+        u8 index = makeConstant(std::move(value));
+        emitBytes(OpCode::GLOBAL_DEFINE, index);
+        globals.insert(name.lexeme.c_str(), index);
+    }
+    else
+    {
+        
+        
+        if (currentTask->declareVariable(name.lexeme,false)==-1)
+        {
+            Error("Can not use '"+ name.lexeme+"' as local variable .");
+            return;
+        } else 
+        {
+                INFO("SET LOCAL Variable: %s depth:", name.lexeme.c_str());
+        }
+        
+    }
+   
+
+    
 }
 
 void Parser::variable(bool canAssign)
 {
     Token name = previous();
     Value value = STRING(name.lexeme);
-    u32 arg = makeConstant(std::move(value));
 
-    if (canAssign && match(TokenType::EQUAL))
+    
+    
+    bool global = IsGlobalScope();//is not 0 'global'
+    int index = currentTask->resolveLocal(name.lexeme); //is not in locals
+    if (index == -1 && !global)
     {
+        if (globals.contains(name.lexeme.c_str()))//global but local have scope depth +1 
+            global = true;
+    }
 
-        expression();
-        emitBytes(OpCode::VARIAVEL_ASSIGN, arg);
+        u8 arg = 0;
+        if (global)
+        {
+              
+             arg = makeConstant(std::move(value));
+        }
+
+        if (canAssign && match(TokenType::EQUAL))
+        {
+            expression();
+            if (global)
+            {
+                
+                emitBytes(OpCode::GLOBAL_ASSIGN, arg);
+            }
+            else
+            {
+                 
+
+                   
+                if (index == -1)
+                {
+                    if (globals.contains(name.lexeme.c_str()))
+                    {
+                        u8 arg = makeConstant(std::move(value));
+                        emitBytes(OpCode::GLOBAL_ASSIGN, arg);
+                        return;
+                    }
+                    Error("Local  variable '" + name.lexeme + "' not declared .");
+                    return;
+                }
+                emitBytes(OpCode::LOCAL_SET, index);
+            }
+            
     }
     else if (!canAssign && match(TokenType::EQUAL))
     {
@@ -930,7 +1010,30 @@ void Parser::variable(bool canAssign)
     }
     else
     {
-       emitBytes(OpCode::VARIAVEL_GET, arg);
+       
+      
+        if (global)
+        {
+            emitBytes(OpCode::GLOBAL_GET, arg);
+        }
+        else
+        {
+            
+            int index = currentTask->resolveLocal(name.lexeme);
+            if (index == -1)
+            {
+
+                if (globals.contains(name.lexeme.c_str()))
+                {
+                    u8 arg = makeConstant(std::move(value));   
+                    emitBytes(OpCode::GLOBAL_GET, arg);
+                    return;
+                }
+                Error("Can not use local '"+ name.lexeme+"' variable .");
+                return;
+            }
+            emitBytes(OpCode::LOCAL_GET, index);
+        }
         
     }
 }
@@ -938,36 +1041,32 @@ void Parser::variable(bool canAssign)
 void Parser::ifStatement()
 {
 
+    
     consume(TokenType::LEFT_PAREN, "Expect '(' after 'if'");
     expression();
     consume(TokenType::RIGHT_PAREN, "Expect ')' after condition");
 
-    u32 thenJump = emitJump(OpCode::JUMP_IF_FALSE);
+    u8 thenJump = emitJump(OpCode::JUMP_IF_FALSE);
+    
+    emitByte(OpCode::POP);
+    
     statement();
 
-    u32 elseJump = emitJump(OpCode::JUMP);
+    u8 elseJump = emitJump(OpCode::JUMP);
+    
     patchJump(thenJump);
+    
+    emitByte(OpCode::POP);
 
-    while (match(TokenType::ELIF))
-    {
-        consume(TokenType::LEFT_PAREN, "Expect '(' after 'elif'.");
-        expression();
-        consume(TokenType::RIGHT_PAREN, "Expect ')' after elif condition.");
-
-        thenJump = emitJump(OpCode::JUMP_IF_FALSE);
-
-        statement(); // Executa o bloco 'elif'
-
-        patchJump(elseJump);
-        elseJump = emitJump(OpCode::JUMP);
-        patchJump(thenJump);
-    }
-
+   // printf("thenJump: %d elseJump %d:\n", thenJump, elseJump);
     if (match(TokenType::ELSE))
     {
         statement();
     }
     patchJump(elseJump);
+
+
+
 }
 
 void Parser::switchStatement()
@@ -977,10 +1076,12 @@ void Parser::switchStatement()
     consume(TokenType::RIGHT_PAREN, "Expect ')' after switch condition.");
     consume(TokenType::LEFT_BRACE, "Expect '{' before switch cases.");
 
-    Vector<u32> endJumps;
+    Vector<u8> endJumps;
     endJumps.reserve(32);
 
     int caseCount = 0;
+    
+
     int defaultJump = -1;
 
     while (match(TokenType::CASE))
@@ -990,17 +1091,26 @@ void Parser::switchStatement()
         consume(TokenType::COLON, "Expect ':' after case value.");
 
         emitByte(OpCode::EQUAL); // Compara a expressão do switch com a expressão do case
-        u32 caseJump = emitJump(OpCode::JUMP_IF_FALSE);
-
+        u8 caseJump = emitJump(OpCode::JUMP_IF_FALSE);
+        emitByte(OpCode::POP);
         statement(); // Executa o bloco do case
+        emitByte(OpCode::POP);
 
-        u32 jump = emitJump(OpCode::JUMP); // Pula para o fim do switch
+        u8 jump = emitJump(OpCode::JUMP); // Pula para o fim do switch
+        emitByte(OpCode::POP);
         endJumps.push_back(jump);
         caseCount++;
 
         patchJump(caseJump);
-    }
+        emitByte(OpCode::POP);
 
+
+    }
+ 
+    emitByte(OpCode::POP); // Remove o valor da expressão 
+    
+   
+    
     if (match(TokenType::DEFAULT))
     {
         consume(TokenType::COLON, "Expect ':' after default case.");
@@ -1016,191 +1126,26 @@ void Parser::switchStatement()
         return;
     }
 
+
     for (int i = 0; i < caseCount; i++)
     {
         patchJump(endJumps[i]);
+        
     }
-
+    
+  
     if (defaultJump != -1)
     {
         patchJump(defaultJump);
     }
-    emitByte(OpCode::POP); // Remove o valor da expressão do switch duplicado
-}
-
-void Parser::whileStatement()
-{
-
-    // int loopStartBackup = currentTask->loopStart;
-    // int exitJumpBackup = currentTask->exitJump;
-
-    // currentTask->loopStart = currentTask->code_size();
-
-    // consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
-    // expression();
-    // consume(TokenType::RIGHT_PAREN, "Expect ')' after condition.");
-
-    // currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
-
-    // statement();
-
-    // emitLoop(currentTask->loopStart);
-    // patchJump(currentTask->exitJump);
-
-    // currentTask->loopStart = loopStartBackup;
-    // currentTask->exitJump = exitJumpBackup;
-}
-void Parser::doWhileStatement()
-{
-
-    // int breakJumpCount = currentTask->breakJumps.size();
-
-    // int loopStartBackup = currentTask->loopStart;
-    // int exitJumpBackup = currentTask->exitJump;
-
-    // currentTask->loopStart = currentTask->code_size();
-
-    // currentTask->exitJump = -2;
-
-    // statement();
-
-    // consume(TokenType::WHILE, "Expect 'while' after loop body in do-while statement.");
-    // consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
-
-    // expression();
-    // consume(TokenType::RIGHT_PAREN, "Expect ')' after condition.");
-    // consume(TokenType::SEMICOLON, "Expect ';' after do-while condition.");
-
-    // currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
-    // emitLoop(currentTask->loopStart);
-
-    // for (int i = breakJumpCount; i < (int)currentTask->breakJumps.size(); i++)
-    // {
-    //     patchJump(currentTask->breakJumps[i]);
-    // }
-
-    // patchJump(currentTask->exitJump);
-
-    // currentTask->breakJumps.resize(breakJumpCount);
-
-    // currentTask->loopStart = loopStartBackup;
-    // currentTask->exitJump = exitJumpBackup;
-}
-
-
-void Parser::loopStatement()
-{
-    
-   // int loopStart = currentTask->code_size();
-
-    
-
-    
-    emitByte(OpCode::LOOP_BEGIN);
-    emitByte(OpCode::NONE);
-    currentTask->setLoop();
-
-    statement();
-
-
-    emitByte(OpCode::LOOP_END);
-    emitByte(OpCode::NONE);
-    currentTask->setEnd();
- 
-    
-
-  //  int loopEnd = currentTask->code_size();
-
-  
-
-  
     
     
-
-}
-
-void Parser::forStatement()
-{
-
-    int loopStartBackup = currentTask->loopStart;
-    int exitJumpBackup = currentTask->exitJump;
-    consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
-
-    emitByte(OpCode::ENTER_SCOPE);
-
-    if (match(TokenType::SEMICOLON))
-    {
-        // No initializer
-    }
-    else if (match(TokenType::VAR))
-    {
-        variableDeclaration();
-    }
-    else
-    {
-        expressionStatement();
-    }
-
-    currentTask->loopStart = currentTask->code_size();
-    currentTask->exitJump = -1;
-
-    if (!match(TokenType::SEMICOLON)) // exit condition
-    {
-        expression();
-        consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
-
-        currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
-    }
-
-    if (!match(TokenType::RIGHT_PAREN))
-    {
-        int bodyJump = emitJump(OpCode::JUMP);
-        int incrementStart = currentTask->code_size();
-        expression();
-        emitByte(OpCode::POP);
-        consume(TokenType::RIGHT_PAREN, "Expect ')' after loop body.");
-
-        emitLoop(currentTask->loopStart);
-
-        currentTask->loopStart = incrementStart;
-
-        patchJump(bodyJump);
-    }
-
-
-    
-    statement();
-    emitLoop(currentTask->loopStart);
-
-    
-    if (currentTask->exitJump != -1)
-    {
-        patchJump(currentTask->exitJump);
-    }
-
-    currentTask->loopStart = loopStartBackup;
-    currentTask->exitJump = exitJumpBackup;
-
    
 
-    emitByte(OpCode::EXIT_SCOPE);
 }
 
 
 
-void Parser::breakStatement()
-{
-
-    consume(TokenType::SEMICOLON, "Expect ';' after 'break'");
-    emitByte(OpCode::BREAK);
-}
-
-void Parser::continueStatement()
-{
-    consume(TokenType::SEMICOLON, "Expect ';' after 'continue'");
-    emitByte(OpCode::CONTINUE);
-
-}
 
 void Parser::returnStatement()
 {
@@ -1231,15 +1176,14 @@ void Parser::callStatement(bool native)
 
     // push function name
 
+   // INFO("Calling function %s with argument %s", name.lexeme.c_str(),peek().lexeme.c_str());
+
     emitConstant(STRING(name.lexeme));
-    u32 argCount = argumentList(false);
+    u8 argCount = argumentList(false);
 
     if (native)
     {
         emitBytes(OpCode::CALL, argCount); // push args count and call
-      //emitByte(OpCode::RETURN_NATIVE);
-        
-    
     }
     else
         emitBytes(OpCode::CALL_SCRIPT, argCount);
@@ -1272,4 +1216,241 @@ u8 Parser::argumentList(bool canAssign)
         return 0;
     }
     return count;
+}
+
+
+void Parser::whileStatement()
+{
+
+    int previousLoopStart = currentTask->loopStart;
+    int previousBreakJumpCount = currentTask->breakJumpCount;
+
+    currentTask->loopStart = currentTask->chunk->count;
+    currentTask->breakJumpCount = 0;
+    
+    scopeEnter();
+
+    consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
+    expression();
+    consume(TokenType::RIGHT_PAREN, "Expect ')' after condition.");
+
+    currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
+    emitByte(OpCode::POP); 
+    statement();
+
+    emitLoop(currentTask->loopStart);
+    
+    
+    patchJump(currentTask->exitJump);
+    emitByte(OpCode::POP); 
+
+    patchBreakJumps();
+    
+
+    currentTask->loopStart = previousLoopStart;
+    currentTask->breakJumpCount = previousBreakJumpCount;
+
+    scopeExit();
+}
+void Parser::doWhileStatement()
+{
+ 
+
+    int previousLoopStart      = currentTask->loopStart;
+    int previousBreakJumpCount = currentTask->breakJumpCount;
+    currentTask->breakJumpCount = 0;
+    
+
+    currentTask->exitJump = -1;
+
+    currentTask->loopStart     = currentTask->chunk->count;    
+    statement();
+   
+    consume(TokenType::WHILE, "Expect 'while' after loop body in do-while statement.");
+    consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
+    expression();
+    consume(TokenType::RIGHT_PAREN, "Expect ')' after condition.");
+    consume(TokenType::SEMICOLON, "Expect ';' after do-while condition.");
+
+
+    
+
+    currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
+    emitByte(OpCode::POP); 
+    
+    emitLoop(currentTask->loopStart);
+
+
+    patchJump(currentTask->exitJump);
+    emitByte(OpCode::POP);
+
+    for (int i = 0; i < currentTask->breakJumpCount; i++)
+    {
+        patchJump(currentTask->breakJumps[i]);
+    }
+
+    
+    
+
+
+    currentTask->breakJumpCount = 0;
+    currentTask->loopStart = previousLoopStart;
+    currentTask->breakJumpCount = previousBreakJumpCount;
+    
+} 
+
+
+void Parser::loopStatement()
+{  
+    int previousLoopStart = currentTask->loopStart;
+    int previousBreakJumpCount = currentTask->breakJumpCount;
+
+
+
+    currentTask->loopStart = currentTask->chunk->count;
+    currentTask->breakJumpCount = 0;
+    currentTask->exitJump = 1;
+    scopeEnter();
+
+    statement();
+    emitLoop(currentTask->loopStart);
+    
+     
+
+    patchBreakJumps();
+    scopeExit();
+    
+    currentTask->loopStart = previousLoopStart;
+    currentTask->breakJumpCount = previousBreakJumpCount; 
+   
+}
+
+void Parser::forStatement()
+{
+
+    int previousLoopStart = currentTask->loopStart;
+    int previousBreakJumpCount = currentTask->breakJumpCount;
+
+    
+    currentTask->breakJumpCount = 0;
+
+    consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
+
+   
+   
+    scopeEnter();
+
+
+
+    if (match(TokenType::SEMICOLON))
+    {
+        // No initializer
+    }
+    else if (match(TokenType::VAR))
+    {
+        variableDeclaration();
+    }
+    else
+    {
+        expressionStatement();
+    }
+
+    currentTask->loopStart = currentTask->chunk->count;
+    currentTask->exitJump = -1;
+
+    if (!match(TokenType::SEMICOLON)) // exit condition
+    {
+        expression();
+        
+        consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
+
+        currentTask->exitJump = emitJump(OpCode::JUMP_IF_FALSE);
+        emitByte(OpCode::POP);
+    }
+
+    if (!match(TokenType::RIGHT_PAREN))
+    {
+        int bodyJump = emitJump(OpCode::JUMP);
+        int incrementStart = currentTask->chunk->count;
+        expression();
+        emitByte(OpCode::POP);
+        consume(TokenType::RIGHT_PAREN, "Expect ')' after loop body.");
+
+        emitLoop(currentTask->loopStart);
+
+        currentTask->loopStart = incrementStart;
+
+        patchJump(bodyJump);
+    }
+
+
+    
+    statement();
+    emitLoop(currentTask->loopStart);
+
+    
+    if (currentTask->exitJump != -1)
+    {
+        patchJump(currentTask->exitJump);
+        emitByte(OpCode::POP);
+    }
+    
+    patchBreakJumps();
+
+
+    
+    currentTask->loopStart = previousLoopStart;
+    currentTask->breakJumpCount = previousBreakJumpCount;
+
+   
+
+   
+   scopeExit();
+   
+}
+
+
+
+void Parser::breakStatement()
+{
+
+    if (currentTask->loopStart == -1) 
+    {
+        vm->Error("Cannot use 'break' outside of loop");
+        return;
+    }
+    if (currentTask->breakJumpCount == UINT8_MAX) 
+    {
+        vm->Error("Too many breaks");
+        return;
+    }
+    currentTask->breakJumps[currentTask->breakJumpCount++] = emitJump(OpCode::JUMP);
+    
+
+    consume(TokenType::SEMICOLON, "Expect ';' after 'break'");
+
+   
+}
+
+void Parser::continueStatement()
+{
+    consume(TokenType::SEMICOLON, "Expect ';' after 'continue'");
+    if (currentTask->loopStart == -1) 
+    {
+        vm->Error("Cannot use 'continue' outside of loop");
+        return;
+    }
+
+  
+    emitLoop(currentTask->loopStart);
+    
+   
+}
+void Parser::patchBreakJumps()
+{
+    for (int i = 0; i < currentTask->breakJumpCount; i++)
+    {
+        patchJump(currentTask->breakJumps[i]);
+    }
+    currentTask->breakJumpCount = 0;
 }

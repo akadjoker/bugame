@@ -169,7 +169,7 @@ inline T Vector<T, Alloc>::top()
 template <typename T, typename Alloc>
 T &Vector<T, Alloc>::operator[](size_t index)
 {
- //   DEBUG_BREAK_IF(index > cap);
+    DEBUG_BREAK_IF(index > cap);
     return data[index];
 }
 

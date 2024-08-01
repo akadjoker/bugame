@@ -1,4 +1,4 @@
-
+#define _CRT_SECURE_NO_WARNINGS
 #include <stddef.h>
 #include <cstddef> // for std::nullptr_t
 #include <cstdio>
@@ -12,12 +12,9 @@
 #include <time.h>
 
 #include <stdarg.h>
-#include <utility>
-
+//#include <utility>
+//#include <vector>
 #include <stdexcept>
-#include <chrono>
 
-//#include <unordered_map>
-//#include <string>
 
 #include <cmath>

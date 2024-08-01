@@ -6,33 +6,54 @@
 
 static u64 nextID = 0;
 
-
-
-
 void debugValue(const Value &v)
 {
     switch (v.type)
     {
-        case ValueType::VSTRING:  printf("%s", v.string->string.c_str()); break;
-        case ValueType::VNUMBER:  printf("%g", v.number); break;
-        case ValueType::VBOOLEAN: printf("%s", v.boolean ? "true" : "false"); break;
-        case ValueType::VNONE:    printf("nil"); break;
-        case ValueType::VNATIVE:   printf("<native %s>", v.native->name.c_str()); break;
+    case ValueType::VSTRING:
+        printf("%s", v.string->string.c_str());
+        break;
+    case ValueType::VNUMBER:
+        printf("%g", v.number);
+        break;
+    case ValueType::VBOOLEAN:
+        printf("%s", v.boolean ? "true" : "false");
+        break;
+    case ValueType::VNONE:
+        printf("nil");
+        break;
+    case ValueType::VNATIVE:
+        printf("<native %s>", v.native->name.c_str());
+        break;
 
-        default: printf("Unknow value "); break;
+    default:
+        printf("Unknow value ");
+        break;
     }
 }
 void printValueln(const Value &v)
 {
     switch (v.type)
     {
-        case ValueType::VSTRING:  printf("%s\n", v.string->string.c_str()); break;
-        case ValueType::VNUMBER:  printf("%g\n", v.number); break;
-        case ValueType::VBOOLEAN: printf("%s\n", v.boolean ? "true" : "false"); break;
-        case ValueType::VNONE:    printf("nil\n"); break;
-        case ValueType::VNATIVE:   printf("<native %s>\n", v.native->name.c_str()); break;
-      
-        default: printf("Unknow value "); break;
+    case ValueType::VSTRING:
+        printf("%s\n", v.string->string.c_str());
+        break;
+    case ValueType::VNUMBER:
+        printf("%g\n", v.number);
+        break;
+    case ValueType::VBOOLEAN:
+        printf("%s\n", v.boolean ? "true" : "false");
+        break;
+    case ValueType::VNONE:
+        printf("nil\n");
+        break;
+    case ValueType::VNATIVE:
+        printf("<native %s>\n", v.native->name.c_str());
+        break;
+
+    default:
+        printf("Unknow value ");
+        break;
     }
 }
 
@@ -40,427 +61,125 @@ void printValue(const Value &v)
 {
     switch (v.type)
     {
-        case ValueType::VSTRING:  PRINT("%s", v.string->string.c_str()); break;
-        case ValueType::VNUMBER:  PRINT("%g", v.number); break;
-        case ValueType::VBOOLEAN: PRINT("%s", v.boolean ? "true" : "false"); break;
-        case ValueType::VNONE:    PRINT("nil"); break;
-        case ValueType::VNATIVE:  PRINT("<native %s>", v.native->name.c_str()); break;
+    case ValueType::VSTRING:
+        PRINT("%s", v.string->string.c_str());
+        break;
+    case ValueType::VNUMBER:
+        PRINT("%g", v.number);
+        break;
+    case ValueType::VBOOLEAN:
+        PRINT("%s", v.boolean ? "true" : "false");
+        break;
+    case ValueType::VNONE:
+        PRINT("nil");
+        break;
+    case ValueType::VNATIVE:
+        PRINT("<native %s>", v.native->name.c_str());
+        break;
 
-        default: PRINT("Unknow value "); break;
+    default:
+        PRINT("Unknow value ");
+        break;
     }
 }
 
-
-
-
-
-void Task::exitScope()
+void Task::beginScope()
 {
-   
-  
+   // INFO("Begin scope %d", scopeDepth);
+    scopeDepth++;
+    
 }
 
-void Task::setBegin()
+void Task::exitScope(int line)
 {
-    codeType = 0;
-}
-
-void Task::setLoop()
-{
-    codeType = 1;
-}
-
-void Task::setEnd()
-{
-    codeType = 2;
-}
-
-
-
-Task::Task(VirtualMachine *vm, const char *name):Traceable()
-{
-    m_done = false;
-    this->vm = vm;
-    ID = nextID++;
-    type = ObjectType::OTASK;
-    parent = nullptr;
-    state = 0;
-    argsCount = 0;
-    ip = 0;
-    state = 0;
-    this->name = name;
-    constants.reserve(1024);
-    frameDepth = 1024;
-    code.reserve(1024);
-    lines.reserve(code.capacity());
-    stackTop = stack;
-    local.name = name;
-    local.level = ID;
-    local.parent = vm->global;  
-    line = &lines[0];
-    lastLine = line;
-    ip = &code[0];
-    lastIP = ip;
-}
-
-Task::~Task()
-{
-    constants.clear();
-    code.clear();
-    lines.clear();
-    local.clear();
-   
-   // INFO("Free task %s with id %d", name,ID);
-
-}
-
-
-
-
-
-
-void Task::write_byte(u32 byte, int line)
-{
- 
-
-    code.push_back(byte);
-    lines.push_back(line);
-}
-
-bool Task::addArgs(const String &name)
-{
-    for (size_t i = 0; i < args.size(); i++)
+    
+    scopeDepth--;
+    while (localCount > 0 && (locals[localCount - 1].depth > scopeDepth  && !locals[localCount - 1].isArg) )
     {
-        if (matchString(args[i].c_str(),name.c_str(),name.size()))
+     //   INFO("End scope %d %d", scopeDepth,localCount);
+        write_byte(OpCode::POP,line);
+        localCount--;
+    }
+    
+    
+}
+
+int Task::addLocal(const char *name, u32 len,bool isArg)
+{
+    if (localCount == UINT8_MAX)
+    {
+        vm->Error("Too many local variables in task");
+        return -1;
+    }
+    Local *local = &locals[localCount++];
+    strcpy(local->name, name);
+    local->len = len;
+    local->name[len] = '\0';
+    local->depth = scopeDepth;
+    local->isArg = isArg;
+    
+  //  INFO("Add local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
+    
+
+    return localCount - 1;
+}
+int Task::declareVariable(const String &string,bool isArg) 
+{
+    for (int i = localCount - 1; i >= 0; i--) 
+    {
+        Local* local = &locals[i];
+        if (local->depth != -1 && local->depth < scopeDepth) 
         {
-            return false;
+            break;
+        }
+        if (matchString(local->name, string.c_str(), string.length()))
+        {
+            vm->Error("Variable with this %s name already declared in this scope.", local->name);
+            return -1;
         }
     }
-    args.push_back(name);
-    argsCount++;
+    return  addLocal(string.c_str(),string.length(),isArg);
+}
+
+int Task::resolveLocal(const String &string) 
+{
+    for (int i = localCount - 1; i >= 0; i--) 
+    {
+        Local *local = &locals[i];
+        INFO("Resolve local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
+        if (matchString(local->name, string.c_str(), string.length()))
+        {
+            if (local->depth == -1) 
+            {
+                vm->Error("Can't read local variable in its own initializer.");
+            }
+            return i;
+        }
+    }
+      return -1;
+}
+bool Task::setLocalVariable(const String &string, int index)
+{
+    if (index < 0 && index > UINT8_MAX  )
+    {
+        return false;
+    }
+    Local *local = &locals[index];
+    strcpy(local->name, string.c_str());
+    local->len = string.length();
+    local->name[local->len] = '\0';
+    local->depth = 0;
+    localCount++;
     return true;
-}
 
-u32 Task::addConst(Value v)
+}
+void Task::set_process()
 {
-    constants.push_back(std::move(v));
-    return (u32)constants.size() - 1;
+     setLocalVariable("graph", IGRAPH);
+     setLocalVariable("x", IX);
+     setLocalVariable("y", IY);
+     setLocalVariable("id", IID);
 }
-
-u32 Task::addConstString(const char *str)
-{
-    return addConst(STRING(str));
-}
-
-u32 Task::addConstNumber(double number)
-{
-    return addConst(NUMBER(number));
-}
-
-void Task::writeByte(u8 byte,int line)
-{
-    write_byte(byte, line);
-}
-
-void Task::writeBytes(u8 byte1, u8 byte2,int line)
-{
-    writeByte(byte1,line);
-    writeByte(byte2,line);
-}
-void Task::writeConstant(const Value &value,int line)
-{
-    writeBytes(OpCode::CONST, makeConstant(std::move(value)), line);
-}
-u32 Task::makeConstant( Value value)
-{
-    u32 constant = (u32)addConst(std::move(value));
-
-    return (u32)constant;
-}
-
-void Task::writeConstantVar(const char *name, Value value,int line)
-{
-    writeBytes(OpCode::CONST, makeConstant(std::move(value)), line);
-    writeBytes(OpCode::CONST, addConstString(name), line);
-}
-
-
-
-
-void Task::patch(u32 offset)
-{
-    while (true) 
-    {
-        size_t count = code.size();
-        int jump = count - offset - 2;
-        if (jump > UINT16_MAX) 
-        {
-            vm->Error("Too much code to jump over.");
-            break;
-        }
-
-        if (offset + 1 >= count) 
-        {
-            vm->Error("[PATCH] Offset out of bounds.");
-            break;
-        }
-
-        int next = (code[offset] << 8) | code[offset + 1];
-
-        code[offset] = (jump >> 8) & 0xff;
-        code[offset + 1] = jump & 0xff;
-
-        if (next == UINT16_MAX)
-            break;
-
-        offset += next;
-    }
-}
-
- void Task::addToInPlaceJumpOffsetList(int offset, int jumpAddress) 
- {
-	// Skip to end of list. Could be optimized away by directly storing the end of the list in the compiler struct:
-    int count =(int) code.size();
-	while (true) 
-    {
-         if (offset + 1 >= count) 
-        {
-            vm->Error("[JUMP OFFSET] Offset out of bounds.");
-            return;
-        }
-
-		int next = (code[offset] << 8) | code[offset + 1];
-		if (next == UINT16_MAX)
-			break;
-		offset += next;
-	}
-
-	int jump = jumpAddress - offset;
-	if (jump >= UINT16_MAX) 
-    {
-		vm->Error("[JUMP OFFSET] Too much code for offset.");
-        return;
-    }
-   
-    if (offset + 1 >= count) 
-    {
-        vm->Error("[JUMP OFFSET] Offset out of bounds.");
-        return;
-    }
-
-    // Append new offset from previous jump to current jump to the list:
-    code[offset]   = (jump >> 8) & 0xff;
-    code[offset+1] = jump & 0xff;
-}
-
-void Task::go_to(int offset, u32 jump)
-{
-    if (offset < 0 || offset >= (int)code.size())
-    {
-        vm->Warning("[GO TO] Offset out of bounds.");
-        
-        return;
-    }
-    code[offset] = jump;
-}
-
-void Task::patchBreaks(int breakJump)
-{
-    while (breakJump != -1) 
-    {
-        int jump = breakJump;
-        breakJump = code[jump];
-        patch(jump);//patch jump
-    }
-}
-u32 Task::code_size()
-{
-    return code.size();
-}
-
-void Task::disassembleCode(const char *name)
-{
-     
-    printf("================== %s ==================\n", name);
-    printf("\n");
-    for (u32 offset = 0; offset < code.size();)
-    {
-        offset = disassembleInstruction(offset);
-    }
-    printf("\n");
-}
-
-u32 Task::disassembleInstruction(u32 offset)
-{
-    
-    printf("%04d ", offset);
-    if (offset > 0 && lines[offset] == lines[offset - 1])
-    {
-        printf("   | ");
-    }
-    else
-    {
-        printf("%4d ", lines[offset]);
-    }
-    u32 instruction = code[offset];
-    switch ((OpCode)instruction)
-    {
-        case OpCode::NONE:    return simpleInstruction("NONE", offset);
-        case OpCode::CONST:  return constantInstruction("CONSTANT", offset);
-        case OpCode::POP:    return simpleInstruction("POP", offset);
-        case OpCode::PUSH:   return simpleInstruction("PUSH", offset);
-        case OpCode::RETURN: return simpleInstruction("RETURN", offset);
-        case OpCode::HALT:   return simpleInstruction("HALT", offset);
-        case OpCode::PRINT:  return simpleInstruction("PRINT", offset);
-        case OpCode::NOW:    return simpleInstruction("NOW", offset);
-        case OpCode::FRAME:   return simpleInstruction("FRAME", offset);
-        case OpCode::ADD:    return simpleInstruction("ADD", offset);
-        case OpCode::SUBTRACT:    return simpleInstruction("SUBTRACT", offset);
-        case OpCode::MULTIPLY:    return simpleInstruction("MULTIPLY", offset);
-        case OpCode::DIVIDE:    return simpleInstruction("DIVIDE", offset);
-        case OpCode::MOD:    return simpleInstruction("MOD", offset);
-        case OpCode::POWER:    return simpleInstruction("POWER", offset);
-        case OpCode::NEGATE:    return simpleInstruction("NEGATE", offset);
-        case OpCode::EQUAL:    return simpleInstruction("EQUAL", offset);
-        case OpCode::NOT_EQUAL:    return simpleInstruction("NOT_EQUAL", offset);
-        case OpCode::GREATER:    return simpleInstruction("GREATER", offset);
-        case OpCode::GREATER_EQUAL:    return simpleInstruction("GREATER_EQUAL", offset);
-        case OpCode::LESS:    return simpleInstruction("LESS", offset);
-        case OpCode::LESS_EQUAL:    return simpleInstruction("LESS_EQUAL", offset);
-        case OpCode::NOT:    return simpleInstruction("NOT", offset);
-        case OpCode::XOR:    return simpleInstruction("XOR", offset);
-        case OpCode::SHL:    return simpleInstruction("SHL", offset);
-        case OpCode::SHR:    return simpleInstruction("SHR", offset);
-
-        case OpCode::LOOP_BEGIN:    return simpleInstruction("LOOP_BEGIN", offset);
-        case OpCode::LOOP_END:    return simpleInstruction("LOOP_END", offset);
-
-        case OpCode::BREAK:    return simpleInstruction("BREAK", offset);
-        case OpCode::CONTINUE:    return simpleInstruction("CONTINUE", offset);
-
-
-        case OpCode::DUP:    return simpleInstruction("DUP", offset);
-        case OpCode::EVAL_EQUAL:    return simpleInstruction("EVAL_EQUAL", offset);
-
-
-        case OpCode::ENTER_SCOPE:    return simpleInstruction("ENTER_SCOPE", offset);
-        case OpCode::EXIT_SCOPE:    return simpleInstruction("EXIT_SCOPE", offset);
-
-
-        case OpCode::VARIAVEL_DEFINE:    return varInstruction("VARIAVEL_DEFINE", offset);
-        case OpCode::VARIAVEL_ASSIGN:    return varInstruction("VARIAVEL_ASSIGN", offset);
-        case OpCode::VARIAVEL_GET:    return varInstruction("VARIAVEL_GET", offset);
-        
-        
-       
-        
-        case OpCode::SWITCH:    return simpleInstruction("SWITCH", offset);
-        case OpCode::CASE:    return jumpInstruction("CASE",1, offset);
-        case OpCode::SWITCH_DEFAULT:    return jumpInstruction("DEFAULT", 1,offset);
-
-
-
-
-
-        case OpCode::JUMP_BACK:    return jumpInstruction("JUMP_BACK", -1,  offset);
-        
-        case OpCode::JUMP:    return jumpInstruction("JUMP", 1,  offset);
-        case OpCode::JUMP_IF_FALSE:   return jumpInstruction("JUMP_IF_FALSE", 1,  offset);
-        case OpCode::JUMP_IF_TRUE:  return  jumpInstruction("JUMP_IF_TRUE", 1,  offset);
-
-        case OpCode::CALL:    return byteInstruction("CALL_NATIVE", offset);
-        case OpCode::CALL_SCRIPT:    return byteInstruction("CALL_SCRIPT", offset);
-        case OpCode::CALL_PROCESS:    return byteInstruction("CALL_PROCESS", offset);
-
-        case OpCode::RETURN_DEF:    return byteInstruction("DEF_RETURN", offset);
-        case OpCode::RETURN_PROCESS:    return byteInstruction("PROCESS_RETURN", offset);
-        case OpCode::RETURN_NATIVE:    return byteInstruction("NATIVE_RETURN", offset);
-        
-        
-       
-        case OpCode::NIL :    return byteInstruction("NIL", offset);
-
-        
-        default: 
-        {
-            printf("Unknow instruction %d\n", instruction); 
-            return code.size();
-            break;
-        }
-    }
-    return offset;
-}
-
-u32 Task::byteInstruction(const char *name, u32 offset)
-{
-    u32 slot = code[offset+1];
-    printf("%-16s %4d\n", name, slot);
-    return offset + 2;
-}
-
-u32 Task::jumpInstruction(const char *name, u32 sign, u32 offset)
-{
-    u16 jump = (u16)code[offset+1] << 8;
-    jump |= code[offset+2];
-    printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
-    return offset + 3;
-}
-
-u32 Task::varInstruction(const char *name, u32 offset)
-{
-    u32 constant = code[offset+1];
-
-
-    
-
-
-    printf("%-16s %4d '", name, constant);
-    Value value = constants[constant];
-    debugValue(value);
-    printf("'\n");
-
-  
-    
-    
-  
-    
-    return offset + 2;
-}
-
-u32 Task::constantInstruction(const char *name, u32 offset)
-{
-   
-    
-    u32 constant = code[offset+1];
-
-
-    
-
-
-    printf("%-16s %4d '", name, constant);
-    Value value = constants[constant];
-
-    
-
-    
-
-    debugValue(value);
-    printf("'\n");
-
-
-    return offset + 2;
-}
-
-u32 Task::simpleInstruction(const char *name, u32 offset)
-{
-    printf("%s\n", name);
-    return offset + 1;
-}
-
-
-
-
-
 Value Task::top()
 {
     return *stackTop;
@@ -470,7 +189,8 @@ bool Task::push(Value v)
 {
     if (stackTop - stack >= STACK_MAX)
     {
-        vm->Error("[PUSH] Stack overflow");
+        PrintStack();
+        vm->Error("[PUSH] Stack overflow %s", name.c_str());
         return false;
     }
     *stackTop = std::move(v);
@@ -482,8 +202,8 @@ Value Task::pop()
 {
     if (stackTop == stack)
     {
-        vm->Error("[POP] Stack underflow");
-        return NONE();
+       // INFO("[POP] is zero");
+      //  return VirtualMachine::DEFAULT;
     }
 
     stackTop--;
@@ -492,12 +212,7 @@ Value Task::pop()
 
 Value Task::peek(int distance)
 {
-    if (distance<0 || stackTop - stack <= distance)
-    {
-        vm->Error("[PEEK] Stack underflow at distance %d", distance);
-        return NONE();
-    }
-    return *(stackTop - 1 - distance);
+    return stackTop[-1 - distance];
 }
 
 void Task::pop(u32 count)
@@ -508,12 +223,418 @@ void Task::pop(u32 count)
     }
 }
 
-int Task::read_line()
+Task::Task(VirtualMachine *vm, const char *name) : Traceable()
 {
-    return *line++;
-    // return lines[*ip];
+    m_done = false;
+    is_main = false;
+    PanicMode = false;
+    this->vm = vm;
+    ID = nextID++;
+    type = ObjectType::OTASK;
+    parent = nullptr;
+    argsCount = 0;
+    isReturned = false;
+
+    this->name = name;
+    constants.reserve(256);
+    frameDepth = 1024;
+
+    scopeDepth = 0;
+    localCount = 0;
+
+    // lineBuffer = lines.pointer();
+    
+
+    stackTop = stack;
+    chunk = nullptr;
+
+    // INFO("Create task %s with id %d", name, ID);
+
+
 }
 
+Task::~Task()
+{
+
+    if (chunk!=nullptr)
+    {
+        delete chunk;
+        chunk = nullptr;
+    }
+    
+    constants.clear();
+
+
+    //INFO("Destroy task %s with id %d", name, ID);
+}
+
+void Task::init_frames()
+{
+    frameCount = 0;
+    Frame *frame = &frames[frameCount++];
+    frame->task = this;
+    frame->slots = stack;
+    frame->ip = chunk->code;
+}
+
+const char *opcodeNames[] = {
+    "NONE",
+    "PUSH",
+    "POP",
+    "CONST",
+    "RETURN",
+    "HALT",
+    "PRINT",
+    "NOW",
+    "FRAME",
+
+    "ADD",
+    "SUBTRACT",
+    "MULTIPLY",
+    "DIVIDE",
+
+    "MOD",
+    "POWER",
+    "NEGATE",
+
+    "EQUAL",
+    "NOT_EQUAL",
+    "GREATER",
+    "LESS",
+    "GREATER_EQUAL",
+    "LESS_EQUAL",
+
+    "TRUE",
+    "FALSE",
+    "NOT",
+    "AND",
+    "OR",
+    "XOR",
+    "INC",
+    "DEC",
+    "SHL",
+    "SHR",
+
+    "ENTER_SCOPE",
+    "EXIT_SCOPE",
+
+    "GLOBAL_DEFINE",
+    "GLOBAL_GET",
+    "GLOBAL_ASSIGN",
+
+    "LOCAL_DEFINE",
+    "LOCAL_GET",
+    "LOCAL_ASSIGN",
+
+    "SWITCH",
+    "CASE",
+    "SWITCH_DEFAULT",
+
+    "DUP",
+    "EVAL_EQUAL",
+
+    "JUMP_BACK",
+
+    "LOOP_BEGIN",
+    "LOOP_END",
+
+    "BREAK",
+    "CONTINUE",
+
+    "DROP",
+    "CALL",
+    "CALL_SCRIPT",
+    "CALL_PROCESS",
+    "RETURN_DEF",
+    "RETURN_PROCESS",
+    "RETURN_NATIVE",
+
+    "NIL",
+
+    "JUMP",
+    "JUMP_IF_FALSE",
+    "JUMP_IF_TRUE",
+    "COUNT"};
+
+void Task::write_byte(u8 byte, int line)
+{
+
+    // if (byte < COUNT)
+    // {
+    //     printf("    write %d %d %s \n", chunk.count, line,opcodeNames[byte]);
+    // }
+    chunk->write(byte, line);
+}
+
+
+
+u8 Task::addConst(Value v)
+{
+
+    for (size_t i = 0; i < constants.size(); i++)
+    {
+        if (MatchValue(constants[i], v))
+        {
+           ///  INFO("recycle constant %d", i);
+            return (u8)i;
+        }
+    }
+
+    constants.push_back(std::move(v));
+    if (constants.size() > 256)
+    {
+        vm->Error("Too many constants in  task");
+        return 0;
+    }
+  
+    return (u8)  constants.size() - 1;
+}
+
+u8 Task::addConstString(const char *str)
+{
+    return addConst(STRING(str));
+}
+
+u8 Task::addConstNumber(double number)
+{
+    return addConst(NUMBER(number));
+}
+
+void Task::writeByte(u8 byte, int line)
+{
+    write_byte(byte, line);
+}
+
+void Task::writeBytes(u8 byte1, u8 byte2, int line)
+{
+    writeByte(byte1, line);
+    writeByte(byte2, line);
+}
+void Task::writeConstant(Value value, int line)
+{
+    writeBytes(OpCode::CONST, makeConstant(std::move(value)), line);
+}
+u8 Task::makeConstant(Value value)
+{
+    int constant = (int)addConst(std::move(value));
+    if (constant > 255)
+    {
+        vm->Error("Too many constants in  task");
+        return 0;
+    }
+    return (u8)constant;
+}
+
+
+
+
+void Task::disassembleCode(const char *name)
+{
+
+    printf("================== %s ==================\n", name);
+    printf("\n");
+    for (size_t offset = 0; offset < chunk->count;)
+    {
+        offset = disassembleInstruction(offset);
+    }
+    printf("\n");
+}
+
+u32 Task::disassembleInstruction(u32 offset)
+{
+
+    printf("%04d ", offset);
+    if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
+    {
+        printf("   | ");
+    }
+    else
+    {
+        printf("%4d ", chunk->lines[offset]);
+    }
+    u8 instruction = chunk->code[offset];
+    switch ((OpCode)instruction)
+    {
+
+    case OpCode::TRUE:
+        return simpleInstruction("TRUE", offset);
+    case OpCode::NIL:
+        return simpleInstruction("NIL", offset);
+    case OpCode::FALSE:
+        return simpleInstruction("FALSE", offset);
+    case OpCode::CONST:
+        return constantInstruction("CONSTANT", offset);
+    case OpCode::PROGRAM:
+        return constantInstruction("PROGRAM", offset);
+        
+    case OpCode::POP:
+        return simpleInstruction("POP", offset);
+    case OpCode::PUSH:
+        return simpleInstruction("PUSH", offset);
+    case OpCode::RETURN:
+        return simpleInstruction("RETURN", offset);
+    case OpCode::HALT:
+        return simpleInstruction("HALT", offset);
+    case OpCode::PRINT:
+        return simpleInstruction("PRINT", offset);
+    case OpCode::NOW:
+        return simpleInstruction("NOW", offset);
+    case OpCode::FRAME:
+        return simpleInstruction("FRAME", offset);
+    case OpCode::ADD:
+        return simpleInstruction("ADD", offset);
+    case OpCode::SUBTRACT:
+        return simpleInstruction("SUBTRACT", offset);
+    case OpCode::MULTIPLY:
+        return simpleInstruction("MULTIPLY", offset);
+    case OpCode::DIVIDE:
+        return simpleInstruction("DIVIDE", offset);
+    case OpCode::MOD:
+        return simpleInstruction("MOD", offset);
+    case OpCode::POWER:
+        return simpleInstruction("POWER", offset);
+    case OpCode::NEGATE:
+        return simpleInstruction("NEGATE", offset);
+    case OpCode::EQUAL:
+        return simpleInstruction("EQUAL", offset);
+    case OpCode::NOT_EQUAL:
+        return simpleInstruction("NOT_EQUAL", offset);
+    case OpCode::GREATER:
+        return simpleInstruction("GREATER", offset);
+    case OpCode::GREATER_EQUAL:
+        return simpleInstruction("GREATER_EQUAL", offset);
+    case OpCode::LESS:
+        return simpleInstruction("LESS", offset);
+    case OpCode::LESS_EQUAL:
+        return simpleInstruction("LESS_EQUAL", offset);
+    case OpCode::NOT:
+        return simpleInstruction("NOT", offset);
+    case OpCode::XOR:
+        return simpleInstruction("XOR", offset);
+    case OpCode::AND:
+        return simpleInstruction("AND", offset);
+    case OpCode::OR:
+        return simpleInstruction("OR", offset);
+    case OpCode::SHL:
+        return simpleInstruction("SHL", offset);
+    case OpCode::SHR:
+        return simpleInstruction("SHR", offset);
+
+    case OpCode::LOOP_BEGIN:
+        return simpleInstruction("LOOP_BEGIN", offset);
+    case OpCode::LOOP_END:
+        return simpleInstruction("LOOP_END", offset);
+
+    case OpCode::BREAK:
+        return simpleInstruction("BREAK", offset);
+    case OpCode::CONTINUE:
+        return simpleInstruction("CONTINUE", offset);
+
+    case OpCode::DUP:
+        return simpleInstruction("DUP", offset);
+    case OpCode::EVAL_EQUAL:
+        return simpleInstruction("EVAL_EQUAL", offset);
+
+  
+    case OpCode::GLOBAL_DEFINE:
+        return varInstruction("GLOBAL_DEFINE", offset);
+    case OpCode::GLOBAL_ASSIGN:
+        return varInstruction("GLOBAL_ASSIGN", offset);
+    case OpCode::GLOBAL_GET:
+        return varInstruction("GLOBAL_GET", offset);
+
+    case OpCode::LOCAL_SET:
+        return byteInstruction("LOCAL_SET", offset);
+    case OpCode::LOCAL_GET:
+        return byteInstruction("LOCAL_GET", offset);
+
+    case OpCode::SWITCH:
+        return simpleInstruction("SWITCH", offset);
+    case OpCode::CASE:
+        return jumpInstruction("CASE", 1, offset);
+    case OpCode::SWITCH_DEFAULT:
+        return jumpInstruction("DEFAULT", 1, offset);
+
+    case OpCode::JUMP_BACK:
+        return jumpInstruction("JUMP_BACK", -1, offset);
+
+    case OpCode::JUMP:
+        return jumpInstruction("JUMP", 1, offset);
+    case OpCode::JUMP_IF_FALSE:
+        return jumpInstruction("JUMP_IF_FALSE", 1, offset);
+    case OpCode::JUMP_IF_TRUE:
+        return jumpInstruction("JUMP_IF_TRUE", 1, offset);
+
+    case OpCode::CALL:
+        return byteInstruction("CALL_NATIVE", offset);
+    case OpCode::CALL_SCRIPT:
+        return byteInstruction("CALL_SCRIPT", offset);
+    case OpCode::CALL_PROCESS:
+        return byteInstruction("CALL_PROCESS", offset);
+
+    case OpCode::RETURN_DEF:
+        return byteInstruction("DEF_RETURN", offset);
+    case OpCode::RETURN_PROCESS:
+        return simpleInstruction("PROCESS_RETURN", offset);
+
+    default:
+    {
+        printf("Unknow instruction %d\n", instruction);
+        return chunk->count;
+        break;
+    }
+    }
+    return offset;
+}
+
+u32 Task::byteInstruction(const char *name, u32 offset)
+{
+    u8 slot = chunk->code[offset + 1];
+    printf("%-16s %4d\n", name, slot);
+    return offset + 2;
+}
+
+u32 Task::jumpInstruction(const char *name, u32 sign, u32 offset)
+{
+    u16 jump = (u16)chunk->code[offset + 1] << 8;
+    jump |= chunk->code[offset + 2];
+    printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
+    return offset + 3;
+}
+
+u32 Task::varInstruction(const char *name, u32 offset)
+{
+    u8 constant = chunk->code[offset + 1];
+
+    printf("%-16s %4d '", name, constant);
+    Value value = constants[constant];
+    debugValue(value);
+    printf("'\n");
+
+    return offset + 2;
+}
+
+
+
+u32 Task::constantInstruction(const char *name, u32 offset)
+{
+
+    u8 constant = chunk->code[offset + 1];
+
+    printf("%-16s %4d '", name, constant);
+    Value value = constants[constant];
+
+    debugValue(value);
+    printf("'\n");
+
+    return offset + 2;
+}
+
+u32 Task::simpleInstruction(const char *name, u32 offset)
+{
+    printf("%s\n", name);
+    return offset + 1;
+}
 
 void Task::PrintStack()
 {
@@ -527,49 +648,6 @@ void Task::PrintStack()
 
     printf("\n");
 }
-u8 Task::read_byte()
-{
-    
-    
-    return *ip++;
-    // return code[ip++];
-}
-
-u16 Task::read_short()
-{
-    return (u16)read_byte() << 8 | read_byte();
-    // ip += 2;
-    // return static_cast<u16>((ip[-2] << 8) | ip[-1]);
-    //return 0;
-}
-
-
-
-
-Value Task::read_const()
-{
-    u32 index = read_byte();
-    if (index >= constants.size())
-    {
-        vm->Warning("Invalid constant index");
-     
-        return NONE();
-    }
-    return constants[index];
-}
-
-Value Task::read_const(int index)
-{
-    if (index<0 || index >=(int) constants.size())
-    {
-        vm->Warning("Invalid constant index %d size %d", index, (int) constants.size());
-     
-        return NONE();
-    }
-    return constants[index];
-}
-
-
 
 bool Task::IsDone()
 {
@@ -584,39 +662,76 @@ void Task::Done()
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
-// bool VirtualMachine::RunTask(Task *task)
-// {
-//     (void)task;
-//     return false;
-// }
 
-
-u32 Task::Run()
+static const size_t instructionsPerFrame = 120;
+u8 Task::Run()
 {
-  
     
-    //while (!panicMode && !isHalt && !IsDone())
-     
-    
-    u32 instruction = read_byte();
-    int line = read_line();
-        
-        
+    if (PanicMode)
+        return ABORTED;
+    if (isReturned)
+        return FINISHED;
 
-    switch ((OpCode)instruction)
+ Frame* frame = &frames[frameCount - 1];        
+
+#define READ_BYTE() (*frame->ip++)
+#define READ_SHORT() \
+    (frame->ip += 2,        \
+     (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+#define READ_CONSTANT() (frame->task->constants[READ_BYTE()])
+    
+
+    // printf("Count = %d [",chunk.count);
+    // for (size_t i = 0; i < chunk.count; i++)
+    // {
+    //     if (i != chunk.count - 1)
+    //     {
+    //         printf("%d,", chunk.code[i]);
+    //     } else
+    //     {
+    //         printf("%d",chunk.code[i]);
+    //     }
+    // }
+
+    // printf("]\n");
+
+    while (true)
     {
+
+      //  disassembleInstruction((int)(frame->ip - frame->task->chunk.code));
+        u8 instruction = READ_BYTE();
+        int line = frame->task->chunk->lines[instruction];
+        //vm->currentTask = frame->task;
+
+        // if (instruction == JUMP || instruction == JUMP_IF_FALSE || instruction == JUMP_IF_TRUE || instruction == JUMP_BACK)
+        // {
+        //     uint16_t offset = (instruction << 8) | instruction;
+        //     INFO("JUMP %d ", offset);
+
+        // } else
+        // {
+        //   printf("%s - %d\n", OpCodeNames[instruction].c_str(),instruction);
+        // }
+
+        switch ((OpCode)instruction)
+        {
         case OpCode::CONST:
         {
 
-            Value value = read_const();
-            push(std::move(value));
+            Value value = READ_CONSTANT();
+            push(value);
+
+            if (type==ObjectType::OPROCESS)
+            {
+                INFO("CONSTANT %d", READ_BYTE());
+            }
 
             break;
         }
         case OpCode::PUSH:
         {
 
-            Value value = read_const();
+            Value value = READ_CONSTANT();
             push(std::move(value));
             break;
         }
@@ -625,17 +740,40 @@ u32 Task::Run()
             pop();
             break;
         }
+        case OpCode::TRUE:
+        {
+            push(std::move(BOOLEAN(true)));
+            break;
+        }
+        case OpCode::FALSE:
+        {
+            push(std::move(BOOLEAN(false)));
+            break;
+        }
 
         case OpCode::HALT:
         {
             vm->Warning("Halt!");
-            return 0;
+            isReturned = true;
+            return ABORTED;
+        }
+        case OpCode::PROGRAM:
+        {
+            Value constant = READ_CONSTANT();
+            if (!IS_STRING(constant))
+            {
+                vm->Error("Program  name must be string [line %d]", line);
+                return ABORTED;
+            }
+            //const char *name = AS_RAW_STRING(constant);
+            break;
         }
         case OpCode::PRINT:
         {
             Value value = pop();
             // printValue(std::move(value));
-            printValueln(std::move(value));
+            debugValue(std::move(value));
+            printf("\n");
             break;
         }
         case OpCode::NOW:
@@ -645,37 +783,9 @@ u32 Task::Run()
         }
         case OpCode::ADD:
         {
-             Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-
-                Value result = NUMBER(AS_NUMBER(a) + AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                String result = a.string->string + b.string->string;
-                push(std::move(STRING(result.c_str())));
-            }
-            else if (IS_STRING(a) && IS_NUMBER(b))
-            {
-                String number(AS_NUMBER(b));
-                String result = a.string->string + number;
-                push(std::move(STRING(result.c_str())));
-            }
-            else if (IS_NUMBER(a) && IS_STRING(b))
-            {
-                String number(AS_NUMBER(a));
-                String result = number + b.string->string;
-                push(std::move(STRING(result.c_str())));
-            }
-            else
-            {
-
-                vm->Error("invalid 'adding' operands [line %d]", line);
-                return 0;
-            }
+            u8 result = op_add();
+            if (result!=OK)
+                return result;
             break;
         }
         case OpCode::SUBTRACT:
@@ -690,7 +800,8 @@ u32 Task::Run()
             else
             {
                 vm->Error("invalid  'subtract' operands [line %d]", line);
-                return 0;
+
+                return ABORTED;
             }
 
             break;
@@ -707,7 +818,7 @@ u32 Task::Run()
             else
             {
                 vm->Error("invalid 'multiply' operands [line %d]", line);
-                return 0;
+                return ABORTED;
             }
             break;
         }
@@ -720,7 +831,8 @@ u32 Task::Run()
                 if (AS_NUMBER(b) == 0)
                 {
                     vm->Error("division by zero [line %d]", line);
-                    return 0;
+
+                    return ABORTED;
                 }
                 Value result = NUMBER(AS_NUMBER(a) / AS_NUMBER(b));
                 push(std::move(result));
@@ -728,37 +840,16 @@ u32 Task::Run()
             else
             {
                 vm->Error("invalid 'divide' operands [line %d]", line);
-                return 0;
+
+                return ABORTED;
             }
             break;
         }
         case OpCode::MOD:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                double _a = AS_NUMBER(a);
-                double divisor = AS_NUMBER(b);
-                if (divisor == 0)
-                {
-                    vm->Error("division by zero [line %d]", line);
-                    
-                    return 0;
-                }
-                double result = fmod(_a, divisor);
-                if (result != 0 && ((_a < 0) != (divisor < 0)))
-                {
-                    result += divisor;
-                }
-                push(std::move(NUMBER(result)));
-            }
-            else
-            {
-                vm->Error("invalid 'mod' operands [line %d]", line);
-                
-                return 0;
-            }
+            u8 result = op_mod(line);
+            if (result!=OK)
+                return result;
             break;
         }
         case OpCode::POWER:
@@ -773,8 +864,8 @@ u32 Task::Run()
             else
             {
                 vm->Error("invalid 'power' operands [line %d]", line);
-                
-                return 0;
+
+                return ABORTED;
             }
             break;
         }
@@ -786,39 +877,17 @@ u32 Task::Run()
                 Value result = NUMBER(-AS_NUMBER(value));
                 push(std::move(result));
             }
-            else if (IS_BOOLEAN(value))
-            {
-                Value result = BOOLEAN(!AS_BOOLEAN(value));
-                push(std::move(result));
-            }
             else
             {
-                vm->Error("invalid 'negate' operands [line %d]", line);
-                
-                return 0;
+                vm->Error("invalid 'negate' operands, Operand must be a number.");
+
+                return ABORTED;
             }
             break;
         }
         case OpCode::NOT:
         {
-            Value value = pop();
-            if (IS_BOOLEAN(value))
-            {
-                Value result = BOOLEAN(!AS_BOOLEAN(value));
-                push(std::move(result));
-            }
-            else if (IS_NUMBER(value))
-            {
-                Value result = BOOLEAN(AS_NUMBER(value) == 0);
-                push(std::move(result));
-            }
-
-            else
-            {
-                vm->Error("invalid 'not' operands [line %d]", line);
-                
-                return 0;
-            }
+            push(std::move(BOOLEAN(isFalsey(pop()))));
             break;
         }
         case OpCode::EQUAL:
@@ -826,7 +895,7 @@ u32 Task::Run()
             Value b = pop();
             Value a = pop();
             bool result = MatchValue(a, b);
-            push(BOOLEAN(result));
+            push(std::move(BOOLEAN(result)));
 
             break;
         }
@@ -835,1250 +904,169 @@ u32 Task::Run()
             Value b = peek(0);
             Value a = peek(1);
             bool result = MatchValue(a, b);
-            push(BOOLEAN(result));
+            push(std::move(BOOLEAN(result)));
             break;
         }
         case OpCode::NOT_EQUAL:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) != AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string != b.string->string);
-                push(std::move(result));
-            }
-            else if (IS_BOOLEAN(a) && IS_BOOLEAN(b))
-            {
-                Value result = BOOLEAN(AS_BOOLEAN(a) != AS_BOOLEAN(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'not equal' operands [line %d]", line);
-                
-                return 0;
-            }
+            u8 result = op_not_equal();
+            if (result!=OK)
+                return result;
             break;
         }
         case OpCode::LESS:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) < AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() < b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'less' operands [line %d]", line);
-                
-                return 0;
-            }
+            u8 result = op_less();
+            if (result!=OK)
+                return result;
 
             break;
         }
         case OpCode::LESS_EQUAL:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) <= AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() <= b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'less equal'   [line %d]", line);
-                
-                return 0;
-            }
+           u8 result = op_less_equal();
+            if (result!=OK)
+                return result;
 
             break;
         }
         case OpCode::GREATER:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) > AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() > b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'greater'  [line %d]", line);
-                
-                return 0;
-            }
+            u8 result = op_greater();   
+            if (result!=OK)
+                return result; 
             break;
         }
         case OpCode::GREATER_EQUAL:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) >= AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() >= b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'greater equal'    [line %d]", line);
-                
-                return 0;
-            }
+            u8 result = op_greater_equal();
+            if (result!=OK)
+                return result;
             break;
         }
 
         case OpCode::XOR:
         {
-            Value b = pop();
-            Value a = pop();
-            if (IS_BOOLEAN(a) && IS_BOOLEAN(b))
-            {
-                bool b_a = AS_BOOLEAN(a);
-                bool b_b = AS_BOOLEAN(b);
-                bool result = b_a ^ b_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                int n_a = static_cast<int>(AS_NUMBER(a));
-                int n_b = static_cast<int>(AS_NUMBER(b));
-                int result = n_a ^ n_b;
-                double number = static_cast<double>(result);
-                push(std::move(NUMBER(number)));
-            }
-            else if (IS_BOOLEAN(a) && IS_NUMBER(b))
-            {
-                bool b_a = AS_BOOLEAN(a);
-                int n_b = static_cast<int>(AS_NUMBER(b));
-                bool result = b_a ^ n_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else if (IS_NUMBER(a) && IS_BOOLEAN(b))
-            {
-                int n_a = static_cast<int>(AS_NUMBER(a));
-                bool b_b = AS_BOOLEAN(b);
-                bool result = n_a ^ b_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else
-            {
-                vm->Error("invalid 'xor' operands [line %d]", line);
-                
-                return 0;
-            }
-            break;
-        }
-        case OpCode::VARIAVEL_DEFINE:
-        {
-
-            Value constant = read_const();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  name must be string [line %d]", line);
-                
-                return 0;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value = pop();
-
-            if (vm->getScopeDepth() == 0)
-            {
-                if (!vm->global->define(name, std::move(value)))
-                {
-                    vm->Warning("Already a global variable with '%s' name.", name);
-                    break;
-                }
-            }
-            else
-            {
-                //   PRINT("Added local variable %s\n", name);
-                if (!local.define(name, std::move(value)))
-                {
-                    vm->Warning("Already a variable with '%s' name.", name);
-                    break;
-                }
-            }
-            //  printValue(value);
-
+           u8 result = op_xor();
+            if (result!=OK)
+                return result;
             break;
         }
 
-        case OpCode::VARIAVEL_ASSIGN:
+        case OpCode::GLOBAL_DEFINE:
         {
-            Value constant = read_const();
+
+            Value constant = READ_CONSTANT();
             if (!IS_STRING(constant))
             {
                 vm->Error("Variable  name must be string [line %d]", line);
-                
-                return 0;
+
+                return ABORTED;
             }
             const char *name = AS_RAW_STRING(constant);
             Value value = peek();
 
-            if (!local.assign(name, value))
+            if (!vm->global->define(name, value))
             {
-                if (!vm->global->assign(name, value))
-                {
-                    vm->Warning("Undefined variable '%s' [line %d]", name, line);
-                }
+                vm->Error("Already a global variable with '%s' name.", name);
+                return ABORTED;
             }
-
-            break;
-        }
-        case OpCode::VARIAVEL_GET:
-        {
-            Value constant = read_const();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  names must be string [line %d]", line);
-                
-                return 0;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value;
-
-            if (local.get(name, value))
-            {
-
-                push(value);
-                break;
-            }
-            else
-            {
-                if (vm->global->get(name, value))
-                {
-                    push(value);
-                }
-                else
-                {
-                    vm->Warning("[READ] Undefined variable '%s' [line %d] %d", name, line, vm->getScopeDepth());
-
-                    push(std::move(NONE()));
-                }
-            }
-
-            break;
-        }
-
-        case OpCode::JUMP_IF_FALSE:
-        {
-            u16 offset = read_short();
-            Value condition = pop();
-
-            if (isFalsey(condition))
-            {
-                ip += offset;
-            }
-            break;
-        }
-        case OpCode::JUMP_IF_TRUE:
-        {
-            u16 offset = read_short();
-            Value condition = pop();
-            if (!isFalsey(condition))
-            {
-                ip -= offset;
-            }
-            break;
-        }
-        case OpCode::DROP:
-        {
-
-            break;
-        }
-        case OpCode::JUMP:
-        {
-            u16 offset = read_short();
-            ip += offset;
-            break;
-        }
-        case OpCode::DUP:
-        {
-            Value value = peek(0);
-            push(value);
-            break;
-        }
-        case OpCode::JUMP_BACK:
-        {
-            uint16_t offset = read_short();
-            ip -= offset;
-            break;
-        }
-
-        case OpCode::ENTER_SCOPE:
-        {
-
-            
-            vm->beginScope();
-
-            // if (type == ObjectType::OPROCESS)
-            // {
-            //     create();
-            // }
-           
-
-            break;
-        }
-        case OpCode::EXIT_SCOPE:
-        {
-
-            vm->endScope();
-            exitScope();
-           
-
-            break;
-        }
-        case OpCode::CALL:
-        {
-           // PrintStack();
-            size_t argCount = (size_t)read_byte();
-            Value func = peek(argCount);
-            Value args[256];
-            size_t index = argCount - 1;
-            for (size_t i = 0; i < argCount; i++)
-            {
-                args[index] = std::move(peek(argCount - i - 1));
-                index--;
-            }
-           
-            
-            Value result;
-            vm->currentTask = this;
-            int count = vm->callNativeFunction(AS_RAW_STRING(func), args, argCount);
-            if (count >= 1)
-            {
-                 result =  pop();
-            }
-            
-            pop(argCount + 1);
-
-            if (count >= 1)
-            {
-                push(std::move(result));
-                if (IS_BOOLEAN(result))
-                {
-                   bool b = AS_BOOLEAN(result);
-                   if (b)
-                   {
-                       printValue(result);
-                   }
-                }
-                
-            }
-          //  PRINT("Calling %s with %d arguments\n", AS_RAW_STRING(func), argCount);
-      
-            break;
-        }
-        case OpCode::CALL_SCRIPT:
-        {
-
-            u32 argCount = (u32)read_byte();
-            Value func = peek(argCount);
-
-            Task *callTask = vm->getTask(AS_RAW_STRING(func));
-            if (!callTask)
-            {
-                pop(argCount);
-                vm->Error("Task '%s' not defined [line %d]", AS_RAW_STRING(func), line);
-                
-                return 0;
-            }
-            if (callTask->argsCount != argCount)
-            {
-                vm->Error("Function %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-                
-                return 0;
-            }
-            Task *process = vm->addTask(AS_RAW_STRING(func));
-            //callip = 0;
-            //callstackTop = callstack;
-
-            for (u32 i = argCount - 1; i > 0; i--)
-            {
-                Value arg = pop();
-                const char *name = callTask->args[i].c_str();
-                process->local.add(name, std::move(arg));
-            }
-
-            Arena::as().add(process);
-            vm->run_process.push_back(process);
-            process->ip = 0;
-            process->code = callTask->code;
-            process->lines = callTask->lines;
-            process->constants = callTask->constants;
-            process->parent = this;
-            
-
-            break;
-        }
-        case OpCode::RETURN:
-        {
-
-           
-              INFO("Task RETURN %s", name.c_str());
-            
-
-            return FINISHED;
-        }
-        case OpCode::CALL_PROCESS:
-        {
-
-            u32 argCount = read_byte();
-            Value func = peek(argCount);
-            Task *callTask = vm->getTask(AS_RAW_STRING(func));
-            if (!callTask)
-            {
-                pop(argCount);
-                vm->Error("Process '%s' not defined [line %d]", AS_RAW_STRING(func), line);
-                
-                return 0;
-            }
-            if (callTask->argsCount != argCount)
-            {
-                vm->Error("Process %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-                return 0;
-            }
-            Task *process = vm->AddProcess(AS_RAW_STRING(func));
-            callTask->ip = 0;
-            
-
-            for (u32 i = argCount - 1; i > 0; i--)
-            {
-                Value arg = pop();
-                const char *name = callTask->args[i].c_str();
-                process->local.add(name, std::move(arg));
-            }
-
-
-            Arena::as().add(process);
-            process->ip = 0;
-            process->stackTop = process->stack;
-            process->parent = this;
-            process->code = callTask->code;
-            process->lines = callTask->lines;
-            process->constants = callTask->constants;
-            vm->run_process.push_back(process);
-
-
-            break;
-        }
-        case OpCode::RETURN_PROCESS:
-        {
-            if (parent != nullptr)
-            {
-                if (type == ObjectType::OPROCESS)
-                {
-                    remove();
-                }
-                 if (parent->name == "__main__")
-                 {
-                    INFO("Process RETURN %s from main, exit", name.c_str());
-                    return FINISHED;
-                 }
-                 INFO("Process RETURN %s to parent %s", name.c_str(),parent->name.c_str());
-   
-            }
-            return FINISHED;
-        }
-        case OpCode::RETURN_NATIVE:
-        {
-            break;
-        }
-        case OpCode::FRAME:
-        {
-            INFO("FRAME %s", name.c_str());
-
-            break;
-        }
-
-        case OpCode::NIL:
-        {
-            push(std::move(NONE()));
-            break;
-        }
-
-        default:
-        {
-            vm->Error(" %s running %d with unknown '%d' opcode ", name.c_str(), ip, (int)instruction);
-            
-            return 0;
-        }
-        }
-        if (type == ObjectType::OPROCESS)
-        {
-           update();
-        }
-    
-
-
-    return RUNNING;
-}
-
-
- static const size_t instructionsPerFrame = 10;
-
-u8 Task::processBegin()
-{
- //   disassembleCode("task");
-    u8 state =RUNNING;
-    for (u32 i = 0; i < code.size(); i++)
-    {
-        u8 instruction = read_byte();
-        int Line = read_line();
-
-            if (instruction>=TOTAL)
-            {
-                return FINISHED;
-            }
-
-            if (instruction==OpCode::NONE)
-            {
-             //   INFO("NONE %s", name.c_str());
-               continue;
-            }
-
-    
-           //  INFO("Process %s instruction %d line %d", name.c_str(), instruction, Line);
-
-            state = Run(instruction, Line);
-
-            if (instruction==OpCode::LOOP_BEGIN)
-            {
-              //  INFO("LOOP_BEGIN %s", name.c_str());
-                return RUNNING;
-            }
-           
-
-
-            //  INFO("Process %s state %d", name.c_str(), state);
-       
-            
-    }
-
-    return state;
-}
-u8 Task::processLoop()
-{
-     
-        u8 state=RUNNING;
-        for (u32 i = 0; i < instructionsPerFrame; i++)
-        {
-    
-            u8 instruction = read_byte();
-            int Line = read_line();
-
-            if (instruction>=TOTAL)
-            {
-                return RUNNING;
-            }
-            if (instruction==OpCode::NONE)
-            {
-                continue;
-            }       
-
-            state = Run(instruction, Line);
-
-          //  INFO("PROCESS LOOP %d %d %d",*ip,state,instruction);
-         
-            if (instruction==OpCode::LOOP_END)
-            {
-                 return RUNNING;
-            }
-
-            // INFO("loop  %s instruction %d line %d %d", name.c_str(), instruction, Line, state);
-
-            if (instruction==OpCode::BREAK)
-            {
-                return FINISHED;
-            }
-
-            //  INFO("Process %s state %d", name.c_str(), state);
-
-            
-    }
-
-    return state;
-
-}
-u8 Task::processEnd()
-{
-   u8 state =RUNNING;
-        
-    for (u32 i = 0; i < instructionsPerFrame; i++)
-    {
-            u8 instruction = read_byte();
-            int Line = read_line();
-
-            if (instruction>=TOTAL)
-            {
-                return FINISHED;
-            }
-            if (instruction==OpCode::NONE)
-            {
-                continue;
-            }
-
-
-            state = Run(instruction, Line);  
-
-            
-       
-            if (instruction==OpCode::RETURN)
-            {
-                return FINISHED;
-            }
-
-            if (instruction==OpCode::RETURN_PROCESS)
-            {
-                return FINISHED;
-            }
-
-
-    }   
-
-    return state;
-}
-
-
-u32 Task::Process()
-{
-
-    switch(state)
-    {
-        case 0:
-        {
-            state = processBegin();
-            if (state == FINISHED || state ==RUNNING)
-            {
-                    lastLine = line;
-                    lastIP = ip;
-                    state = 1;
-            } else 
-            if (state == TERMINATED || state == ABORTED)
-            {
-                INFO("Begin terminated %s", name.c_str());
-                state = 5;
-            }
-            break;
-        }
-        case 1:
-        {
-            line = lastLine;
-            ip = lastIP;
-            state = 2;
-            break;
-        }
-        case 2:
-        {
-            
-            state = processLoop();
-         //   INFO("PROCESS LOOP %d %d",*ip,state);
-            if (state == FINISHED)
-            {
-                state = 3;
-            }else 
-            if (state == ABORTED || state == TERMINATED)
-            {
-                state = 5;
-            } else 
-            if (state == RUNNING)
-            {
-                ip = lastIP;
-                state = 1;
-            }
-            //INFO("end LOOP %s state %d end", name.c_str(), state);
-            break;
-        }
-        case 3:
-        {
-           
-            state = 4;
-            break;
-        }
-        case 4:
-        {
-            state = processEnd();
-            if (state == FINISHED)
-            {
-                state = 5;
-            }else 
-            if (state == ABORTED)
-            {
-                state = 5;
-            } else 
-            if (state == TERMINATED)
-            {
-                state = 5;
-            }
-            break;
-        }
-        case 5:
-        {
-            INFO("final Process %s state %d", name.c_str(), state);
-            ip=&code[0];
-            line = &lines[0];
-            state = 6;
-            break;
-        }
-        case 6:
-        {
-            return FINISHED;
-        }
-    }
-
-    return RUNNING;
-}
-
-u32 Task::Run(u32 instruction,u32 line)
-{
-    switch ((OpCode)instruction)
-    {
-        case OpCode::NONE:
-        {
-            return RUNNING;
-        }
-        case OpCode::CONST:
-        {
-
-            Value value = read_const( );
-            push(std::move(value));
-
-            break;
-        }
-        case OpCode::PUSH:
-        {
-
-            Value value = read_const();
-            push(std::move(value));
-            break;
-        }
-        case OpCode::POP:
-        {
             pop();
-            break;
-        }
-
-        case OpCode::HALT:
-        {
-            vm->Warning("Halt!");
-            return 0;
-        }
-        case OpCode::PRINT:
-        {
-            Value value = pop();
-            printValueln(std::move(value));
-            break;
-        }
-        case OpCode::NOW:
-        {
-            push(std::move(NUMBER(time_now())));
-            break;
-        }
-        case OpCode::ADD:
-        {
-             Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-
-                Value result = NUMBER(AS_NUMBER(a) + AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                String result = a.string->string + b.string->string;
-                push(std::move(STRING(result.c_str())));
-            }
-            else if (IS_STRING(a) && IS_NUMBER(b))
-            {
-                String number(AS_NUMBER(b));
-                String result = a.string->string + number;
-                push(std::move(STRING(result.c_str())));
-            }
-            else if (IS_NUMBER(a) && IS_STRING(b))
-            {
-                String number(AS_NUMBER(a));
-                String result = number + b.string->string;
-                push(std::move(STRING(result.c_str())));
-            }
-            else
-            {
-
-                vm->Error("invalid 'adding' operands [line %d]", line);
-                return 0;
-            }
-            break;
-        }
-        case OpCode::SUBTRACT:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(AS_NUMBER(a) - AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid  'subtract' operands [line %d]", line);
-                return ABORTED;
-            }
-
-            break;
-        }
-        case OpCode::MULTIPLY:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(AS_NUMBER(a) * AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'multiply' operands [line %d]", line);
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::DIVIDE:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                if (AS_NUMBER(b) == 0)
-                {
-                    vm->Error("division by zero [line %d]", line);
-                    return ABORTED;
-                }
-                Value result = NUMBER(AS_NUMBER(a) / AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'divide' operands [line %d]", line);
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::MOD:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                double _a = AS_NUMBER(a);
-                double divisor = AS_NUMBER(b);
-                if (divisor == 0)
-                {
-                    vm->Error("division by zero [line %d]", line);
-                    
-                    return ABORTED;
-                }
-                double result = fmod(_a, divisor);
-                if (result != 0 && ((_a < 0) != (divisor < 0)))
-                {
-                    result += divisor;
-                }
-                push(std::move(NUMBER(result)));
-            }
-            else
-            {
-                vm->Error("invalid 'mod' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::POWER:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(pow(AS_NUMBER(a), AS_NUMBER(b)));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'power' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::NEGATE:
-        {
-            Value value = pop();
-            if (IS_NUMBER(value))
-            {
-                Value result = NUMBER(-AS_NUMBER(value));
-                push(std::move(result));
-            }
-            else if (IS_BOOLEAN(value))
-            {
-                Value result = BOOLEAN(!AS_BOOLEAN(value));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'negate' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::NOT:
-        {
-            Value value = pop();
-            if (IS_BOOLEAN(value))
-            {
-                Value result = BOOLEAN(!AS_BOOLEAN(value));
-                push(std::move(result));
-            }
-            else if (IS_NUMBER(value))
-            {
-                Value result = BOOLEAN(AS_NUMBER(value) == 0);
-                push(std::move(result));
-            }
-
-            else
-            {
-                vm->Error("invalid 'not' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::EQUAL:
-        {
-            Value b = pop();
-            Value a = pop();
-            bool result = MatchValue(a, b);
-            push(BOOLEAN(result));
-
-            break;
-        }
-        case OpCode::EVAL_EQUAL:
-        {
-            Value b = peek(0);
-            Value a = peek(1);
-            bool result = MatchValue(a, b);
-            push(BOOLEAN(result));
-            break;
-        }
-        case OpCode::NOT_EQUAL:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) != AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string != b.string->string);
-                push(std::move(result));
-            }
-            else if (IS_BOOLEAN(a) && IS_BOOLEAN(b))
-            {
-                Value result = BOOLEAN(AS_BOOLEAN(a) != AS_BOOLEAN(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'not equal' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::LESS:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) < AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() < b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'less' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-
-            break;
-        }
-        case OpCode::LESS_EQUAL:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) <= AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() <= b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'less equal'   [line %d]", line);
-                
-                return ABORTED;
-            }
-
-            break;
-        }
-        case OpCode::GREATER:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) > AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() > b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'greater'  [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::GREATER_EQUAL:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = BOOLEAN(AS_NUMBER(a) >= AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else if (IS_STRING(a) && IS_STRING(b))
-            {
-                Value result = BOOLEAN(a.string->string.length() >= b.string->string.length());
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'greater equal'    [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-
-        case OpCode::XOR:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_BOOLEAN(a) && IS_BOOLEAN(b))
-            {
-                bool b_a = AS_BOOLEAN(a);
-                bool b_b = AS_BOOLEAN(b);
-                bool result = b_a ^ b_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                int n_a = static_cast<int>(AS_NUMBER(a));
-                int n_b = static_cast<int>(AS_NUMBER(b));
-                int result = n_a ^ n_b;
-                double number = static_cast<double>(result);
-                push(std::move(NUMBER(number)));
-            }
-            else if (IS_BOOLEAN(a) && IS_NUMBER(b))
-            {
-                bool b_a = AS_BOOLEAN(a);
-                int n_b = static_cast<int>(AS_NUMBER(b));
-                bool result = b_a ^ n_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else if (IS_NUMBER(a) && IS_BOOLEAN(b))
-            {
-                int n_a = static_cast<int>(AS_NUMBER(a));
-                bool b_b = AS_BOOLEAN(b);
-                bool result = n_a ^ b_b;
-                push(std::move(BOOLEAN(result)));
-            }
-            else
-            {
-                vm->Error("invalid 'xor' operands [line %d]", line);
-                
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::VARIAVEL_DEFINE:
-        {
-
-            Value constant = read_const();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  name must be string [line %d]", line);
-                
-                return ABORTED;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value = pop();
-
-            if (vm->getScopeDepth() == 0)
-            {
-                if (!vm->global->define(name, std::move(value)))
-                {
-                    vm->Warning("Already a global variable with '%s' name.", name);
-                    break;
-                }
-            }
-            else
-            {
-                //   PRINT("Added local variable %s\n", name);
-                if (!local.define(name, std::move(value)))
-                {
-                    vm->Warning("Already a variable with '%s' name.", name);
-                    break;
-                }
-            }
             //  printValue(value);
 
             break;
         }
 
-        case OpCode::VARIAVEL_ASSIGN:
+        case OpCode::GLOBAL_ASSIGN:
         {
-            Value constant = read_const();
+            Value constant = READ_CONSTANT();
             if (!IS_STRING(constant))
             {
                 vm->Error("Variable  name must be string [line %d]", line);
-                
+
                 return ABORTED;
             }
             const char *name = AS_RAW_STRING(constant);
             Value value = peek();
 
-            if (!local.assign(name, value))
+            if (!vm->global->assign(name, value))
             {
-                if (!vm->global->assign(name, value))
-                {
-                    vm->Warning("Undefined variable '%s' [line %d]", name, line);
-                }
+                vm->Warning("Undefined global variable '%s' [line %d]", name, line);
             }
 
             break;
         }
-        case OpCode::VARIAVEL_GET:
+        case OpCode::GLOBAL_GET:
         {
-            Value constant = read_const();
+            Value constant = READ_CONSTANT();
             if (!IS_STRING(constant))
             {
                 vm->Error("Variable  names must be string [line %d]", line);
-                
+
                 return ABORTED;
             }
             const char *name = AS_RAW_STRING(constant);
             Value value;
 
-            if (local.get(name, value))
+            if (vm->global->get(name, value))
             {
-
                 push(value);
-                break;
             }
             else
             {
-                if (vm->global->get(name, value))
-                {
-                    push(value);
-                }
-                else
-                {
-                    vm->Warning("[READ] Undefined variable '%s' [line %d] %d", name, line, vm->getScopeDepth());
+                vm->Error("Undefined global variable '%s' [line %d]", name, line);
 
-                    push(std::move(NONE()));
-                }
+                return ABORTED;
             }
+
+            break;
+        }
+        case OpCode::LOCAL_SET:
+        {
+            u8 slot = READ_BYTE();
+
+            frame->slots[slot]= peek(0);
+            
+
+           printf("local get variable %d", slot);
+           printValue(frame->slots[slot]);
+
+        
+            break;
+        }
+        case OpCode::LOCAL_GET:
+        {
+            u8 slot = READ_BYTE();
+            
+           printValue(frame->slots[slot]);
+           INFO("local get variable %d %s", slot,frame->task->name.c_str());
+            push(frame->slots[slot]);
 
             break;
         }
 
         case OpCode::JUMP_IF_FALSE:
         {
-            u16 offset = read_short();
-            Value condition = pop();
-
-            if (isFalsey(condition))
+            u16 offset = READ_SHORT();
+            Value value = peek(0);
+            if (isFalsey(value))
             {
-                ip += offset;
+                frame->ip += offset;
+                //   printf("offset: %d\n", offset);
             }
             break;
         }
         case OpCode::JUMP_IF_TRUE:
         {
-            u16 offset = read_short();
-            Value condition = pop();
-            if (!isFalsey(condition))
-            {
-                ip -= offset;
-            }
-            break;
-        }
-        case OpCode::DROP:
-        {
-
+            u16 offset = READ_SHORT();
+            frame->ip += offset;
             break;
         }
         case OpCode::JUMP:
         {
-            u16 offset = read_short();
-            ip += offset;
+            u16 offset = READ_SHORT();
+            frame->ip += offset;
+            //  printf("jump offset: %d\n", offset);
             break;
         }
         case OpCode::DUP:
@@ -2089,189 +1077,173 @@ u32 Task::Run(u32 instruction,u32 line)
         }
         case OpCode::JUMP_BACK:
         {
-            uint16_t offset = read_short();
-            ip -= offset;
+            uint16_t offset = READ_SHORT();
+            frame->ip -= offset;
             break;
         }
 
-        case OpCode::ENTER_SCOPE:
-        {
-
-            
-            vm->beginScope();
-
-            // if (type == ObjectType::OPROCESS)
-            // {
-            //     create();
-            // }
-           
-
-            break;
-        }
-        case OpCode::EXIT_SCOPE:
-        {
-
-            vm->endScope();
-            exitScope();
-           
-
-            break;
-        }
+  
         case OpCode::CALL:
         {
-           // PrintStack();
-            size_t argCount = (size_t)read_byte();
+            uint8_t argCount = READ_BYTE();
             Value func = peek(argCount);
-            Value args[256];
-            size_t index = argCount - 1;
-            for (size_t i = 0; i < argCount; i++)
+            if (!IS_STRING(func))
             {
-                args[index] = std::move(peek(argCount - i - 1));
-                index--;
+                vm->Error("Native Function name must be string [line %d]", line);
+                printValue(func);
+                return ABORTED;
             }
-           
-            
             Value result;
+            int popResult = -1;
             vm->currentTask = this;
-            int count = vm->callNativeFunction(AS_RAW_STRING(func), args, argCount);
-            if (count >= 1)
+            int count = vm->callNativeFunction(AS_RAW_STRING(func), (stackTop - argCount), argCount);
+            if (count==-1)
             {
-                 result =  pop();
+                return ABORTED;
+            } 
+            if (count > 0)
+            { 
+                popResult = count;
+                result = peek();
             }
-            
-            pop(argCount + 1);
-
-            if (count >= 1)
-            {
+            stackTop -= (argCount + 1) + popResult;
+            if (count > 0)
                 push(std::move(result));
-                if (IS_BOOLEAN(result))
-                {
-                   bool b = AS_BOOLEAN(result);
-                   if (b)
-                   {
-                       printValue(result);
-                   }
-                }
-                
-            }
-          //  PRINT("Calling %s with %d arguments\n", AS_RAW_STRING(func), argCount);
-      
             break;
         }
         case OpCode::CALL_SCRIPT:
         {
 
-            u32 argCount = (u32)read_byte();
+            int argCount = (int)READ_BYTE();
             Value func = peek(argCount);
-
-            Task *callTask = vm->getTask(AS_RAW_STRING(func));
-            if (!callTask)
+            if (!IS_STRING(func))
             {
-                pop(argCount);
-                vm->Error("Task '%s' not defined [line %d]", AS_RAW_STRING(func), line);
-                
+                vm->Error("Function name must be string [line %d]", line);
+                printValue(func);
+                return ABORTED;
+            }
+            FunctionObject *callTask = nullptr;
+            if (!vm->getFunction(AS_RAW_STRING(func), &callTask))
+            {
+                vm->Error("Function '%s' not defined [line %d]", AS_RAW_STRING(func), line);
                 return ABORTED;
             }
             if (callTask->argsCount != argCount)
             {
-                vm->Error("Function %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-                
+                vm->Error("Function %s, Expected %d arguments but got %d [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
                 return ABORTED;
             }
-            Task *process = vm->addTask(AS_RAW_STRING(func));
-            //callip = 0;
-            //callstackTop = callstack;
 
-            for (u32 i = argCount - 1; i > 0; i--)
-            {
-                Value arg = pop();
-                const char *name = callTask->args[i].c_str();
-                process->local.add(name, std::move(arg));
-            }
+            frame = &frames[frameCount++];
+            frame->task = callTask;
+            frame->ip = callTask->chunk->code;
+            frame->slots = stackTop - argCount -1;
 
-            Arena::as().add(process);
-            vm->run_process.push_back(process);
-            process->code = callTask->code;
-            process->lines = callTask->lines;
-            process->constants = callTask->constants;
-            process->parent = this;
+          
+
+            callTask->disassembleCode(callTask->name.c_str());
             
-
+            if (frameCount == MAX_FRAMES)
+            {
+                    vm->Error("Frames  overflow .");
+                    return ABORTED;
+            }
             break;
         }
         case OpCode::RETURN:
         {
 
-           
-              INFO("Task RETURN %s", name.c_str());
+           // PrintStack();
+            Value result = pop();
+            frameCount--;
+            if (frameCount == 0)
+            {
+               // frame->task->exitScope(line);
+                INFO("main %s", frame->task->name.c_str());
+                PrintStack();
+                pop();
+                return TERMINATED;
+            }
+          //  INFO("return %s", frame->task->name.c_str());
+            frame->task->exitScope(line);
+            stackTop = frame->slots;
+            push(result);
+            frame = &frames[frameCount - 1];
             
-
-            return TERMINATED;
+            break;
         }
         case OpCode::CALL_PROCESS:
         {
 
-            u32 argCount = read_byte();
-            Value func = peek(argCount);
-            Task *callTask = vm->getTask(AS_RAW_STRING(func));
-            if (!callTask)
-            {
-                pop(argCount);
-                vm->Error("Process '%s' not defined [line %d]", AS_RAW_STRING(func), line);
+                u8 argCount = READ_BYTE();
+                Value func = peek(argCount);
+                if (!IS_STRING(func))
+                {
+                    vm->Warning("Process name must be a string");
+                    printValue(func);
+
+                    return ABORTED;
+                }
+                const char* name = AS_RAW_STRING(func);
+                Task *callTask = vm->getTask(AS_RAW_STRING(func));
+                if (!callTask)
+                {
+                    pop(argCount);
+                    vm->Error("Process '%s' not defined [line %d]", AS_RAW_STRING(func), line);
+
+                    return ABORTED;
+                }
+                if (callTask->argsCount != argCount)
+                {
+                    vm->Error("Process %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
+
+                    return ABORTED;
+                }
+
+                //INFO("Process CALL %s args %d chunk %d", name ,callTask->argsCount,callTask->chunk->count);
+                Process *process = vm->AddProcess(name);
+                process->chunk= new Chunk(callTask->chunk);
+                process->init_frames();//prepare frames 4 functions
+                for (size_t i=0;i<this->constants.size();i++)
+                {
+                    process->constants.push_back(callTask->constants[i]);
+                }
+                process->set_defaults();//local variables x,y, ... etc
+
+        
                 
-                return ABORTED;
-            }
-            if (callTask->argsCount != argCount)
-            {
-                vm->Error("Process %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-                return ABORTED;
-            }
-            Task *process = vm->AddProcess(AS_RAW_STRING(func));
-            callTask->ip = 0;
-            
+                for (int i = argCount; i >= 0; i--)
+                {
+                    Value arg = pop();
+                    process->frames[0].slots[process->localCount + i] = arg;
+                }
+                //frame->slots = stackTop - argCount -1;
+                
+                process->disassembleCode(name);
+                if (this->type == ObjectType::OPROCESS)
+                {
+                    process->set_parent(static_cast<Process*>(this));
+                }
+                
 
-            for (u32 i = argCount - 1; i > 0; i--)
-            {
-                Value arg = pop();
-                const char *name = callTask->args[i].c_str();
-                process->local.add(name, std::move(arg));
-            }
-
-
-            Arena::as().add(process);
-            process->parent = this;
-            process->code = callTask->code;
-            process->lines = callTask->lines;
-            process->ip    = &process->code[0];
-            process->line  = &process->lines[0];
-            process->constants = callTask->constants;
-            vm->run_process.push_back(process);
-
-
-            break;
+                vm->run_process.push_back(process);
+                
+               // PrintStack();
+                break;
         }
         case OpCode::RETURN_PROCESS:
         {
-            if (parent != nullptr)
-            {
-                if (type == ObjectType::OPROCESS)
-                {
-                    remove();
-                }
-                 if (parent->name == "__main__")
-                 {
-                    INFO("Process RETURN %s from main, exit", name.c_str());
-                    return TERMINATED;
-                 }
-                 INFO("Process RETURN %s to parent %s", name.c_str(),parent->name.c_str());
-   
-            }
+           
+            
+           // disassembleCode(name.c_str());
+          //  INFO("Process RETURN %s ", name.c_str());
+           // PrintStack();
+            
+        
+
             return TERMINATED;
         }
-        case OpCode::RETURN_NATIVE:
-        {
-            break;
-        }
+
         case OpCode::FRAME:
         {
             INFO("FRAME %s", name.c_str());
@@ -2281,39 +1253,20 @@ u32 Task::Run(u32 instruction,u32 line)
 
         case OpCode::NIL:
         {
-            push(std::move(NONE()));
-            break;
-        }
-        case OpCode::LOOP_BEGIN:
-        {
-            break;
-        }
-        case OpCode::LOOP_END:
-        {
-            break;
-        }
-        case OpCode::BREAK:
-        {
-            break;
-        }
-        case OpCode::CONTINUE:
-        {
+            push(VirtualMachine::DEFAULT);
             break;
         }
 
         default:
         {
-            vm->Error(" %s running %d with unknown '%d' opcode ", name.c_str(), ip, (int)instruction);
-            
+            vm->Error(" %s running %d with unknown '%d' opcode frame %d", name.c_str(), frame->ip, (int)instruction, frameCount);
+
             return ABORTED;
         }
         }
-        if (type == ObjectType::OPROCESS)
-        {
-        //   update();
-        }
-    
-
-
-    return RUNNING;
+    }
+#undef READ_BYTE
+#undef READ_SHORT
+#undef READ_CONSTANT
+    return FINISHED;
 }

@@ -11,12 +11,13 @@ typedef uint64_t u64;
 
 #if defined(_DEBUG)
 #include <assert.h>
-#define DEBUG_BREAK_IF(_CONDITION_) assert(!(_CONDITION_));
+//#define DEBUG_BREAK_IF(_CONDITION_) assert(!(_CONDITION_));
+#define DEBUG_BREAK_IF(condition) if (condition) { fprintf(stderr, "Debug break: %s at %s:%d\n", #condition, __FILE__, __LINE__); std::exit(EXIT_FAILURE); }
 #else
 #define DEBUG_BREAK_IF(_CONDITION_)
 #endif
 
-inline u32 CalculateCapacityGrow(u32 capacity, u32 minCapacity)
+inline size_t CalculateCapacityGrow(size_t capacity, size_t minCapacity)
 {
     if (capacity < minCapacity)
         capacity = minCapacity;

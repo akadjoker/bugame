@@ -31,8 +31,6 @@ struct Traceable
     static void operator delete(void *ptr, size_t size);
 };
 
-
-
 struct StringObject : public Traceable
 {
     String string;
@@ -51,7 +49,6 @@ struct NativeFunctionObject : public Traceable
     int call(VirtualMachine *vm, int argc, Value *args);
 };
 
-
 struct Value
 {
     u8 flags;
@@ -62,30 +59,21 @@ struct Value
         StringObject *string;
         bool boolean;
         NativeFunctionObject *native;
-    
-
     };
-
-    
 };
 
-
-
 #define INTEGER(value) \
-    (Value) {.flags = 0, .type = ValueType::VNUMBER, .number = static_cast<double>(value) }
+    (Value{0, ValueType::VNUMBER, {.number = static_cast<double>(value)}})
 #define NUMBER(value) \
-    (Value) {.flags = 0, .type = ValueType::VNUMBER, .number = (value) }
+    (Value{0, ValueType::VNUMBER, {.number = (value)}})
 #define STRING(value) \
-    (Value) {.flags = 0, .type = ValueType::VSTRING, .string = new StringObject(value) }
+    (Value{0, ValueType::VSTRING, {.string = new StringObject(value)}})
 #define BOOLEAN(value) \
-    (Value) {.flags = 0, .type = ValueType::VBOOLEAN, .boolean = (value) }
+    (Value{0, ValueType::VBOOLEAN, {.boolean = (value)}})
 #define NONE() \
-    (Value) {.flags = 0, .type = ValueType::VNONE, .number = (0) }
-
-#define NATIVE(fn,name,arity) \
-    (Value) {.flags = 0, .type = ValueType::VNATIVE, .native = new NativeFunctionObject(fn, name, arity) }
-
-
+    (Value{0, ValueType::VNONE, {.number = 0}})
+#define NATIVE(fn, name, arity) \
+    (Value{0, ValueType::VNATIVE, {.native = new NativeFunctionObject(fn, name, arity)}})
 
 #define AS_INTEGER(value) (static_cast<int>((value).number))
 #define AS_NUMBER(value) ((double)(value).number)
@@ -94,18 +82,13 @@ struct Value
 #define AS_RAW_STRING(value) (AS_STRING(value)->string.c_str())
 #define AS_NATIVE(value) ((NativeFunctionObject *)(value).native)
 
-
 #define IS_BOOLEAN(value) ((value).type == ValueType::VBOOLEAN)
 #define IS_NUMBER(value) ((value).type == ValueType::VNUMBER)
 #define IS_STRING(value) ((value).type == ValueType::VSTRING)
 #define IS_NONE(value) ((value).type == ValueType::VNONE)
 #define IS_NATIVE_DEF(value) ((value).type == ValueType::VNATIVE)
 
-
-
-
-
-//isFalsey
+// isFalsey
 
 #define IS_OBJECT(value) ((value).type == ValueType::VSTRING)
 #define MARK(value)                  \
@@ -118,7 +101,6 @@ struct Value
         if (IS_OBJECT(value))          \
             AS_STRING(value)->unmark() \
     }
-
 
 inline Value Clone(const Value &value)
 {
@@ -140,29 +122,64 @@ inline bool MatchValue(const Value &value, const Value &with)
     if (value.type != with.type)
         return false;
     if (IS_STRING(value) && IS_STRING(with))
+    {
+        if (AS_STRING(value)->string.length() != AS_STRING(with)->string.length())
+            return false;
         return AS_STRING(value)->string == AS_STRING(with)->string;
+    }
     else if (IS_NUMBER(value) && IS_NUMBER(with))
         return fabs(AS_NUMBER(value) - AS_NUMBER(with)) < 0.01953; // TODO: use epsilon error margin
+    // return AS_NUMBER(value) == AS_NUMBER(with);
     else if (IS_BOOLEAN(value) && IS_BOOLEAN(with))
         return AS_BOOLEAN(value) == AS_BOOLEAN(with);
-    
+
     else if (IS_NONE(value))
         return true;
     return false;
 }
 
-inline bool  isFalsey(const Value &value)
+inline bool isFalsey(Value value)
 {
+    if (IS_NONE(value))
+        return true;
+    if (IS_BOOLEAN(value))
+    {
+        return !value.boolean;
+    }
+    if (IS_STRING(value))
+        return AS_STRING(value)->string.length() == 0;
     if (IS_NUMBER(value))
-        return AS_NUMBER(value) == 0;
-    else if (IS_BOOLEAN(value))
-        return !AS_BOOLEAN(value);
-    else if (IS_STRING(value))
-        return AS_STRING(value)->string == "";
-    else
-        return false;
+    {
+        int i = (int)AS_NUMBER(value);
+        return (i == 0);
+    }
+    return false;
 }
 
+class Chunk
+{
+    u32 m_capacity;
+
+public:
+    Chunk(u32 capacity = 512);
+    Chunk(Chunk *other);
+    ~Chunk();
+
+    void clear();
+    void reserve(u32 capacity);
+
+    void write(u8 instruction, int line);
+
+    u32 capacity() const { return m_capacity; }
+
+    u8 operator[](u32 index);
+
+    bool clone(Chunk *other);
+
+    u8 *code;
+    int *lines;
+    u32 count;
+};
 class List
 {
 private:
@@ -236,41 +253,15 @@ struct Entry
 {
     uint32_t hash;
     String key;
-    Value  value;
+    Value value;
     bool use;
     Entry()
-    { 
+    {
         value = NONE();
         hash = 0;
         use = false;
         key = "";
     };
-};
-
-#define TABLE_MAX_LOAD 0.75
-#define TABLE_INITIAL_CAPACITY 16;
-
-
-class Table
-{
-
-private:
-    int count;
-    int capacity;
-    Entry *entries;
-
-    void adjustCapacity(int newCapacity);
-    Entry *findEntry(Entry *entries, int capacity, const String &key);
-
-public:
-    Table();
-    ~Table();
-
-    void clear();
-    bool  get(const String &key, Value *value);
-    bool  set(const String &key, Value value);
-    bool  contains(const String &key);
-    bool  remove(const String &key);
 };
 
 class Set

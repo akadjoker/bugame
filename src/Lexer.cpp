@@ -122,7 +122,7 @@ void Lexer::Error(String message)
   String textLine = String(line);
   String text = message + " at line: " + textLine;
   Log(2, text.c_str());
-  clear();
+  panicMode = true;
 }
 
 void Lexer::addNative(const char *name)
@@ -277,60 +277,50 @@ Vector<Token> Lexer::process()
       return tokens;
     }
 
-
-    if (tokens.size() > 0)  
+    if (tokens.size() > 0)
     {
-    if (prevTokenMatch(TokenType::PROGRAM))
-    {
-        programName = tokens[tokens.size() - 1].lexeme;
-    } else 
-    if (prevTokenMatch(TokenType::FUNCTION))
-    {
-        if (programName==tokens[tokens.size() - 1].lexeme)
+        if (prevTokenMatch(TokenType::PROGRAM))
         {
-            Error("Function name cannot be the same as the program name");
-            tokens.clear();
-            return tokens;
-        }
-      
-        tokens[tokens.size() - 1].type = TokenType::IDFUNCTION;
-        functions.insert(tokens[tokens.size() - 1].lexeme.c_str(), tokens.size() - 1);
-    } else 
-    if (prevTokenMatch(TokenType::PROCESS))
-    {
-        if (programName==tokens[tokens.size() - 1].lexeme)
+            programName = tokens[tokens.size() - 1].lexeme;
+        } else 
+        if (prevTokenMatch(TokenType::FUNCTION))
         {
-            Error("Process name cannot be the same as the program name");
-            tokens.clear();
-            return tokens;
-        }
-        tokens[tokens.size() - 1].type = TokenType::IDPROCESS;
-        processes.insert(tokens[tokens.size() - 1].lexeme.c_str(), tokens.size() - 1);
-    } else    if (tokens[tokens.size() - 1].type == TokenType::IDENTIFIER)
-    {
-          if (hasFunction(tokens[tokens.size() - 1].lexeme))
-          {
+            
             tokens[tokens.size() - 1].type = TokenType::IDFUNCTION;
-          } else 
-          if (hasProcess(tokens[tokens.size() - 1].lexeme))
-          {
+            functions.insert(tokens[tokens.size() - 1].lexeme.c_str(), tokens.size() - 1);
+        } else 
+        if (prevTokenMatch(TokenType::PROCESS))
+        {
+          
             tokens[tokens.size() - 1].type = TokenType::IDPROCESS;
-          } else 
-          if (hasNative(tokens[tokens.size() - 1].lexeme))
-          {
-            tokens[tokens.size() - 1].type = TokenType::IDNATIVE;
-          } else 
-          {
-                variables.push_back(tokens[tokens.size() - 1].lexeme);
-                tokenIndex.push_back(tokens.size() - 1);
-           }
-        
+            processes.insert(tokens[tokens.size() - 1].lexeme.c_str(), tokens.size() - 1);
+        } else    if (tokens[tokens.size() - 1].type == TokenType::IDENTIFIER)
+        {
+              if (hasFunction(tokens[tokens.size() - 1].lexeme))
+              {
+                tokens[tokens.size() - 1].type = TokenType::IDFUNCTION;
+              } else 
+              if (hasProcess(tokens[tokens.size() - 1].lexeme))
+              {
+                tokens[tokens.size() - 1].type = TokenType::IDPROCESS;
+              } else 
+              if (hasNative(tokens[tokens.size() - 1].lexeme))
+              {
+                tokens[tokens.size() - 1].type = TokenType::IDNATIVE;
+              } else 
+              {
+                    variables.push_back(tokens[tokens.size() - 1].lexeme);
+                    tokenIndex.push_back(tokens.size() - 1);
+              }
+            
+        }
     }
 
   }
   
   updateTokenTypes();
-  }
+  auto token = Token(TokenType::END_OF_FILE, "EOF", "", line);
+  tokens.push_back(token);
 
   return tokens;
 }

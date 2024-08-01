@@ -235,7 +235,7 @@ void Arena::clear()
         delete temp;
     }
 
-     stats();
+    stats();
 }
 
 void Arena::cleanup()
@@ -324,11 +324,11 @@ bool List::remove(Traceable *obj)
     if (obj == nullptr)
         return false;
 
-    int left = 0;
-    int right = m_size - 1;
+    size_t left = 0;
+    size_t right = m_size - 1;
     while (left <= right)
     {
-        int mid = left + (right - left) / 2;
+        size_t mid = left + (right - left) / 2;
         if (m_data[mid]->id == obj->id)
         {
             // m_data[mid] = m_data[--m_size];
@@ -492,136 +492,123 @@ int NativeFunctionObject::call(VirtualMachine *vm, int argc, Value *args)
     return func(vm, argc, args);
 }
 
-void Table::adjustCapacity(int newCapacity)
+Chunk::Chunk(u32 capacity)
+    :  m_capacity(capacity), count(0)
 {
-    Entry *newEntries = new Entry[newCapacity];
+    code  = (u8*)  std::malloc(capacity * sizeof(u8));
+    lines = (int*) std::malloc(capacity * sizeof(int));
 
-    int oldCapacity = capacity;
-    capacity = newCapacity;
-    count = 0;
-
-    for (int i = 0; i < oldCapacity; i++)
-    {
-        Entry *entry = &entries[i];
-        if (!entry->use)
-            continue;
-
-        Entry *dest = findEntry(newEntries, newCapacity, entry->key);
-        dest->key = entry->key;
-        dest->value = entry->value;
-        dest->use = entry->use;
-        dest->hash = entry->hash;
-        count++;
-    }
-
-    delete[] entries;
-    entries = newEntries;
-}
-Entry *Table::findEntry(Entry *entries, int capacity, const String &key)
-{
-    uint32_t index = key.ToHash() & (capacity - 1);
-    Entry *tombstone = nullptr;
-
-    while (true)
-    {
-        Entry *entry = &entries[index];
-        if (entry->key == nullptr)
-        {
-            if (IS_NONE(entry->value))
-            {
-                return tombstone != nullptr ? tombstone : entry;
-            }
-            else
-            {
-                if (tombstone == nullptr)
-                    tombstone = entry;
-            }
-        }
-        else if (entry->key == key)
-        {
-            return entry;
-        }
-        index = (index + 1) & (capacity - 1);
-    }
-}
-//********************************************************** */
-Table::Table()
-{
-    count = 0;
-    capacity = TABLE_INITIAL_CAPACITY;
-    entries = new Entry[capacity];
+    //printf("create chunk   \n");
 }
 
-Table::~Table()
+Chunk::Chunk(Chunk *other)
 {
-    delete[] entries;
-}
 
-void Table::clear()
-{
-    count = 0;
-    capacity = TABLE_INITIAL_CAPACITY;
-    delete[] entries;
-    entries = new Entry[capacity];
-
-}
-
-bool Table::get(const String &key, Value *value)
-{
-    if (count == 0)        return false;
-
-    Entry *entry = findEntry(entries, capacity, key);
-
-    if (!entry->use)        return false;
-
-    *value = entry->value;
-    return true;    
-}
-
-bool Table::set(const String &key, Value value)
-{
-    if (count + 1 > capacity * TABLE_MAX_LOAD)
-    {
-        int newCapacity = capacity * 2;
-        adjustCapacity(newCapacity);
-    }
+    code  = (u8*)  std::malloc(other->m_capacity * sizeof(u8));
+    lines = (int*) std::malloc(other->m_capacity * sizeof(int));
     
-    Entry *entry = findEntry(entries, capacity, key);
-    bool isnewKey = entry->use;
+    m_capacity = other->m_capacity;
+    count = other->count;
 
-    entry->key = key;
-    entry->value = std::move(value);
-    entry->use = true;
-    if (entry->hash == 0)
-    {
-        entry->hash = key.ToHash();
-        count++;
-    }
-    return isnewKey;
+    std::memcpy(code, other->code, other->m_capacity * sizeof(u8));
+    std::memcpy(lines, other->lines, other->m_capacity * sizeof(int));
 }
 
-bool Table::contains(const String &key)
+
+bool Chunk::clone(Chunk *other)
 {
-    if (count == 0)        return false;
+     if (!other)
+        return false;
 
-    Entry *entry = findEntry(entries, capacity, key);
+    
+    std::free(other->code);
+    std::free(other->lines);
 
-    if (!entry->use)        return false;
+    
+    other->m_capacity = m_capacity;
+    other->count = count;
+
+    other->code = (u8*) std::malloc(m_capacity * sizeof(u8));
+    other->lines = (int*) std::malloc(m_capacity * sizeof(int));
+
+    if (!other->code || !other->lines)
+    {
+        std::free(other->code);
+        std::free(other->lines);
+        DEBUG_BREAK_IF(other->code == nullptr || other->lines == nullptr);
+        return false;
+    }
+
+    std::memcpy(other->code, code, count * sizeof(u8));
+    std::memcpy(other->lines, lines, count * sizeof(int));
 
     return true;
+    
 }
 
-bool Table::remove(const String &key)
+
+Chunk::~Chunk()
 {
-    if (count == 0)        return false;
+    std::free(code);
+    std::free(lines);
 
-    Entry *entry = findEntry(entries, capacity, key);
+  //  printf("destroy chunk  \n");
+}
 
-    if (!entry->use)        return false;
+void Chunk::reserve(u32 capacity)
+{
+    if (capacity > m_capacity)
+    {
+       
 
-    entry->key = "";
-    entry->value = NONE();
-    entry->use = false;
+        u8 *newCode  = (u8*) (std::realloc(code,  capacity * sizeof(u8)));
+        int *newLine = (int*)(std::realloc(lines, capacity * sizeof(int)));
+
+        if (!newCode || !newLine)
+        {
+            std::free(newCode);
+            std::free(newLine);
+            DEBUG_BREAK_IF(newCode == nullptr || newLine == nullptr);
+            return;
+        }
+
+
+
+        code = newCode;
+        lines = newLine;      
+        m_capacity = capacity;
+    }
+}
+
+
+
+void Chunk::write(u8 instruction, int line)
+{
+    if (m_capacity < count + 1)
+    {
+        int oldCapacity = m_capacity;
+        m_capacity = GROW_CAPACITY(oldCapacity);
+        u8 *newCode  = (u8*) (std::realloc(code,  m_capacity * sizeof(u8)));
+        int *newLine = (int*)(std::realloc(lines, m_capacity * sizeof(int)));
+        if (!newCode || !newLine)
+        {
+            std::free(newCode);
+            std::free(newLine);
+            DEBUG_BREAK_IF(newCode == nullptr || newLine == nullptr);
+            return;
+        }
+        code = newCode;
+        lines = newLine;      
+
+    }
     
-    return false;
+    code[count]  = instruction;
+    lines[count] = line;
+    count++;
+}
+
+u8 Chunk::operator[](u32 index)
+{
+    DEBUG_BREAK_IF(index > m_capacity);
+    return code[index];
 }

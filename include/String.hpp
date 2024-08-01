@@ -17,7 +17,7 @@ inline char toupper(char c)
     return c;
 }
 
-const u32 NPOS = 0xffffffff;
+const size_t NPOS = 0xffffffff;
 
 class String
 {
@@ -54,7 +54,7 @@ public:
         }
     }
 
-    String(const char *str, u32 length) : m_length(length), m_capacity(length + 1)
+    String(const char *str, size_t length) : m_length(length), m_capacity(length + 1)
     {
         m_buffer = new char[m_capacity];
         std::memcpy(m_buffer, str, length);
@@ -112,6 +112,7 @@ public:
 
     ~String()
     {
+       
         delete[] m_buffer;
     }
 
@@ -167,7 +168,7 @@ public:
 
     String &operator+=(const String &rhs)
     {
-        u32 oldm_Length = m_length;
+        size_t oldm_Length = m_length;
         resize(m_length + rhs.m_length);
         std::memcpy(&m_buffer[oldm_Length], rhs.m_buffer, rhs.m_length);
         return *this;
@@ -175,8 +176,8 @@ public:
 
     String &operator+=(const char *rhs)
     {
-        u32 rhsm_Length = std::strlen(rhs);
-        u32 oldm_Length = m_length;
+        size_t rhsm_Length = std::strlen(rhs);
+        size_t oldm_Length = m_length;
         resize(m_length + rhsm_Length);
         std::memcpy(&m_buffer[oldm_Length], rhs, rhsm_Length);
         return *this;
@@ -184,7 +185,7 @@ public:
 
     String &operator+=(const char rhs)
     {
-        u32 oldm_Length = m_length;
+        size_t oldm_Length = m_length;
         resize(m_length + 1);
         m_buffer[oldm_Length] = rhs;
         m_buffer[m_length] = '\0';
@@ -194,11 +195,11 @@ public:
     String &append(const String &str) { return *this += str; }
     String &append(const char *str) { return *this += str; }
     String &append(char c) { return *this += c; }
-    String &append(const char *str, u32 length)
+    String &append(const char *str, size_t length)
     {
         if (str)
         {
-            u32 oldm_Length = m_length;
+            size_t oldm_Length = m_length;
             resize(m_length + length);
             std::memcpy(&m_buffer[oldm_Length], str, length);
             m_buffer[m_length] = '\0';
@@ -226,12 +227,12 @@ public:
     size_t capacity() const { return m_capacity; }
     bool empty() const { return m_length == 0; }
 
-    char &operator[](u32 index)
+    char &operator[](size_t index)
     {
         DEBUG_BREAK_IF(index > m_length);
         return m_buffer[index];
     }
-    const char &operator[](u32 index) const
+    const char &operator[](size_t index) const
     {
         DEBUG_BREAK_IF(index > m_length);
         return m_buffer[index];
@@ -248,12 +249,12 @@ public:
 
     void ToLower()
     {
-        for (u32 i = 0; i < m_length; i++)
+        for (size_t i = 0; i < m_length; i++)
             m_buffer[i] = tolower(m_buffer[i]);
     }
     void ToUpper()
     {
-        for (u32 i = 0; i < m_length; i++)
+        for (size_t i = 0; i < m_length; i++)
             m_buffer[i] = toupper(m_buffer[i]);
     }
 
@@ -270,21 +271,21 @@ public:
         return ret;
     }
 
-    String Left(u32 count) const
+    String Left(size_t count) const
     {
         if (count >= m_length)
             return *this;
         return String(m_buffer, count);
     }
 
-    String Right(u32 count) const
+    String Right(size_t count) const
     {
         if (count >= m_length)
             return *this;
         return String(m_buffer + m_length - count, count);
     }
 
-    String Mid(u32 pos, u32 count) const
+    String Mid(size_t pos, size_t count) const
     {
         if (pos >= m_length)
             return "";
@@ -293,7 +294,7 @@ public:
         return String(m_buffer + pos, count);
     }
 
-    String Section(u32 Pos1, u32 Pos2) const
+    String Section(size_t Pos1, size_t Pos2) const
     {
         if (Pos1 >= m_length || Pos2 >= m_length || Pos1 > Pos2)
             return "";
@@ -301,13 +302,13 @@ public:
         return this->substr(Pos1, Pos2 - Pos1);
     }
 
-    unsigned long ToHash() const
+    size_t ToHash() const
     {
-        u32 hash = 2166136261u;
+        size_t hash = 2166136261u;
         const char *ptr = m_buffer;
         while (*ptr)
         {
-            hash ^= (u32)(*ptr);
+            hash ^= (size_t)(*ptr);
             hash *= 16777619;
             ++ptr;
         }
@@ -318,7 +319,7 @@ public:
     {
         if (caseSensitive)
         {
-            for (u32 i = 0; i < m_length; ++i)
+            for (size_t i = 0; i < m_length; ++i)
             {
                 if (m_buffer[i] == replaceThis)
                     m_buffer[i] = replaceWith;
@@ -327,7 +328,7 @@ public:
         else
         {
             replaceThis = (char)tolower(replaceThis);
-            for (u32 i = 0; i < m_length; ++i)
+            for (size_t i = 0; i < m_length; ++i)
             {
                 if (tolower(m_buffer[i]) == replaceThis)
                     m_buffer[i] = replaceWith;
@@ -337,11 +338,11 @@ public:
 
     void replace(const String &replaceThis, const String &replaceWith, bool caseSensitive)
     {
-        u32 nextPos = 0;
+        size_t nextPos = 0;
 
         while (nextPos < m_length)
         {
-            u32 pos = find(replaceThis, nextPos, caseSensitive);
+            size_t pos = find(replaceThis, nextPos, caseSensitive);
             if (pos == NPOS)
                 break;
             replace(pos, replaceThis.m_length, replaceWith);
@@ -349,7 +350,7 @@ public:
         }
     }
 
-    void replace(u32 pos, u32 length, const String &replaceWith)
+    void replace(size_t pos, size_t length, const String &replaceWith)
     {
         // If substring is illegal, do nothing
         if (pos + length > m_length)
@@ -358,7 +359,7 @@ public:
         replace(pos, length, replaceWith.m_buffer, replaceWith.m_length);
     }
 
-    void replace(u32 pos, u32 length, const char *replaceWith)
+    void replace(size_t pos, size_t length, const char *replaceWith)
     {
         // If substring is illegal, do nothing
         if (pos + length > m_length)
@@ -367,11 +368,11 @@ public:
         replace(pos, length, replaceWith, strlen(replaceWith));
     }
 
-    u32 find(char c, u32 startPos, bool caseSensitive) const
+    size_t find(char c, size_t startPos, bool caseSensitive) const
     {
         if (caseSensitive)
         {
-            for (u32 i = startPos; i < m_length; ++i)
+            for (size_t i = startPos; i < m_length; ++i)
             {
                 if (m_buffer[i] == c)
                     return i;
@@ -380,7 +381,7 @@ public:
         else
         {
             c = (char)tolower(c);
-            for (u32 i = startPos; i < m_length; ++i)
+            for (size_t i = startPos; i < m_length; ++i)
             {
                 if (tolower(m_buffer[i]) == c)
                     return i;
@@ -390,7 +391,7 @@ public:
         return NPOS;
     }
 
-    u32 find(const String &str, u32 startPos, bool caseSensitive) const
+    size_t find(const String &str, size_t startPos, bool caseSensitive) const
     {
         if (!str.m_length || str.m_length > m_length)
             return NPOS;
@@ -399,7 +400,7 @@ public:
         if (!caseSensitive)
             first = (char)tolower(first);
 
-        for (u32 i = startPos; i <= m_length - str.m_length; ++i)
+        for (size_t i = startPos; i <= m_length - str.m_length; ++i)
         {
             char c = m_buffer[i];
             if (!caseSensitive)
@@ -407,9 +408,9 @@ public:
 
             if (c == first)
             {
-                u32 skip = NPOS;
+                size_t skip = NPOS;
                 bool found = true;
-                for (u32 j = 1; j < str.m_length; ++j)
+                for (size_t j = 1; j < str.m_length; ++j)
                 {
                     c = m_buffer[i + j];
                     char d = str.m_buffer[j];
@@ -451,7 +452,7 @@ public:
         ret.replace(replaceThis, replaceWith, caseSensitive);
         return ret;
     }
-    void replace(u32 pos, u32 length, const char *srcStart, u32 srcLength)
+    void replace(size_t pos, size_t length, const char *srcStart, size_t srcLength)
     {
         int delta = (int)srcLength - (int)length;
 
@@ -473,7 +474,7 @@ public:
 
         CopyChars(m_buffer + pos, srcStart, srcLength);
     }
-    String substr(u32 pos) const
+    String substr(size_t pos) const
     {
         if (pos < m_length)
         {
@@ -487,7 +488,7 @@ public:
             return String();
     }
 
-    String substr(u32 pos, u32 length) const
+    String substr(size_t pos, size_t length) const
     {
         if (pos < m_length)
         {
@@ -505,8 +506,8 @@ public:
 
     String trim() const
     {
-        u32 trimStart = 0;
-        u32 trimEnd = m_length;
+        size_t trimStart = 0;
+        size_t trimEnd = m_length;
 
         while (trimStart < trimEnd)
         {
@@ -528,7 +529,7 @@ public:
 
     String ltrim() const
     {
-        u32 trimStart = 0;
+        size_t trimStart = 0;
         while (trimStart < m_length)
         {
             char c = m_buffer[trimStart];
@@ -542,7 +543,7 @@ public:
 
     String rtrim() const
     {
-        u32 trimEnd = m_length;
+        size_t trimEnd = m_length;
         while (trimEnd > 0)
         {
             char c = m_buffer[trimEnd - 1];
@@ -599,14 +600,14 @@ public:
         return joinedString;
     }
 
-    u32 find_last_of(char c, u32 startPos, bool caseSensitive = true) const
+    size_t find_last_of(char c, size_t startPos, bool caseSensitive = true) const
     {
         if (startPos >= m_length)
             startPos = m_length - 1;
 
         if (caseSensitive)
         {
-            for (u32 i = startPos; i < m_length; --i)
+            for (size_t i = startPos; i < m_length; --i)
             {
                 if (m_buffer[i] == c)
                     return i;
@@ -615,7 +616,7 @@ public:
         else
         {
             c = (char)tolower(c);
-            for (u32 i = startPos; i < m_length; --i)
+            for (size_t i = startPos; i < m_length; --i)
             {
                 if (tolower(m_buffer[i]) == c)
                     return i;
@@ -625,7 +626,7 @@ public:
         return NPOS;
     }
 
-    u32 find_last_of(const String &str, u32 startPos = NPOS, bool caseSensitive = true) const
+    size_t find_last_of(const String &str, size_t startPos = NPOS, bool caseSensitive = true) const
     {
         if (!str.m_length || str.m_length > m_length)
             return NPOS;
@@ -636,7 +637,7 @@ public:
         if (!caseSensitive)
             first = (char)tolower(first);
 
-        for (u32 i = startPos; i < m_length; --i)
+        for (size_t i = startPos; i < m_length; --i)
         {
             char c = m_buffer[i];
             if (!caseSensitive)
@@ -645,7 +646,7 @@ public:
             if (c == first)
             {
                 bool found = true;
-                for (u32 j = 1; j < str.m_length; ++j)
+                for (size_t j = 1; j < str.m_length; ++j)
                 {
                     c = m_buffer[i + j];
                     char d = str.m_buffer[j];
@@ -676,32 +677,32 @@ public:
 
     bool ends_with(const String &str, bool caseSensitive = true) const
     {
-        u32 pos = find_last_of(str, length() - 1, caseSensitive);
-        return pos != NPOS && pos == (u32)length() - str.length();
+        size_t pos = find_last_of(str, length() - 1, caseSensitive);
+        return pos != NPOS && pos == (size_t)length() - str.length();
     }
 
 private:
-    u32 m_length;
-    u32 m_capacity;
+    size_t m_length;
+    size_t m_capacity;
     char *m_buffer;
 
-    void Move(u32 dest, u32 src, u32 count)
+    void Move(size_t dest, size_t src, size_t count)
     {
         if (count)
             std::memmove(m_buffer + dest, m_buffer + src, count);
     }
 
-    void Copy(const char *src, u32 count)
+    void Copy(const char *src, size_t count)
     {
         if (count)
             std::memcpy(m_buffer, src, count);
     }
-    static void CopyChars(char *dest, const char *src, unsigned count)
+    static void CopyChars(char *dest, const char *src, size_t count)
     {
         if (count)
             std::memcpy(dest, src, count);
     }
-    void reserve(u32 newCapacity)
+    void reserve(size_t newCapacity)
     {
         if (newCapacity < m_length + 1)
             newCapacity = m_length + 1;
@@ -716,7 +717,7 @@ private:
         m_buffer = newBuffer;
         m_capacity = newCapacity;
     }
-    void resize(u32 newLength)
+    void resize(size_t newLength)
     {
         if (!m_capacity)
         {
