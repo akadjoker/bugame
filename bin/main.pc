@@ -1,32 +1,24 @@
 program teste;
 
-process bunny(_x,_y)
+
+process teste(a,b,c)
 {
-    x=mouse_x();
-    y=mouse_y();
 
-    loop
-    {
-        x = x + 1;
-        if (x >800)
-        {
-            x=0;
-        }
-    }
-}
+    var i=0;
+    var j=2;
+    var t=1;
 
-bunny(20,20);
-var i=0;
-loop
-{
-      bunny(200,50);
+    print(i);
 
-        for(i=0;i<100;i=i+1)
-        {
-        bunny(200,50);
-        }
+    print(a);
+    print(b);
+    print(c);
+    
    
-
+ 
 }
+
+teste("luis","aka","djoker");
+
 
 print("end prgram");

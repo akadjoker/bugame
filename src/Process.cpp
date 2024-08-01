@@ -13,16 +13,15 @@ void Process::set_parent(Process *p)
     father = p;
     if (p)
     {
-        // Se o novo pai já tiver um filho, ajustamos os irmãos
+        
         if (p->son)
         {
-            // O filho existente se torna o irmão mais velho
             p->son->bigBrother = this;
-            // Este processo se torna o irmão mais novo
+            
             this->smallBrother = p->son;
         }
         
-        // Este processo se torna o filho do pai
+        
         p->son = this;
     }
 }
@@ -144,10 +143,10 @@ void Process::remove()
 void Process::set_defaults()
 {
     set_process();
-    frames[0].slots[IX] = std::move(NUMBER(0.1));
-    frames[0].slots[IY] = std::move(NUMBER(0.2));
-    frames[0].slots[IGRAPH] = std::move(NUMBER(0.3));
-    frames[0].slots[IID] = std::move(NUMBER(0.4));
+    // frames[0].slots[IX] = std::move(NUMBER(0.1));
+    // frames[0].slots[IY] = std::move(NUMBER(0.2));
+    // frames[0].slots[IGRAPH] = std::move(NUMBER(0.3));
+    // frames[0].slots[IID] = std::move(NUMBER(0.4));
 }
 
 void Process::set_variable(const String &name, Value value)

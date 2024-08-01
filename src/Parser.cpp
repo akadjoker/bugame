@@ -761,7 +761,7 @@ void Parser::processDeclaration()
     task->set_process();
     setTask(task);
     
-  //  scopeEnter();
+    scopeEnter();
 
     hasReturned = false;
     task->argsCount = 0;
@@ -791,7 +791,7 @@ void Parser::processDeclaration()
 
 
     
-   // scopeExit();
+    scopeExit();
     emitByte(OpCode::RETURN_PROCESS);
     setTask(defaultTask);
 

@@ -117,6 +117,10 @@ int Task::addLocal(const char *name, u32 len,bool isArg)
     local->name[len] = '\0';
     local->depth = scopeDepth;
     local->isArg = isArg;
+    if (isArg)
+    {
+       constants.push_back(std::move(NONE()));
+    }
     
   //  INFO("Add local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
     
@@ -175,10 +179,11 @@ bool Task::setLocalVariable(const String &string, int index)
 }
 void Task::set_process()
 {
-     setLocalVariable("graph", IGRAPH);
-     setLocalVariable("x", IX);
-     setLocalVariable("y", IY);
-     setLocalVariable("id", IID);
+    //  setLocalVariable("graph", IGRAPH);
+    //  setLocalVariable("x", IX);
+    //  setLocalVariable("y", IY);
+    //  setLocalVariable("id", IID);
+     
 }
 Value Task::top()
 {
@@ -699,6 +704,7 @@ u8 Task::Run()
     {
 
       //  disassembleInstruction((int)(frame->ip - frame->task->chunk.code));
+       //INFO("runt task %s", frame->task->name.c_str());
         u8 instruction = READ_BYTE();
         int line = frame->task->chunk->lines[instruction];
         //vm->currentTask = frame->task;
@@ -721,10 +727,7 @@ u8 Task::Run()
             Value value = READ_CONSTANT();
             push(value);
 
-            if (type==ObjectType::OPROCESS)
-            {
-                INFO("CONSTANT %d", READ_BYTE());
-            }
+            
 
             break;
         }
@@ -1028,8 +1031,8 @@ u8 Task::Run()
             frame->slots[slot]= peek(0);
             
 
-           printf("local get variable %d", slot);
-           printValue(frame->slots[slot]);
+         //  printf("local get variable %d", slot);
+         //  printValue(frame->slots[slot]);
 
         
             break;
@@ -1038,8 +1041,8 @@ u8 Task::Run()
         {
             u8 slot = READ_BYTE();
             
-           printValue(frame->slots[slot]);
-           INFO("local get variable %d %s", slot,frame->task->name.c_str());
+          // printValue(frame->slots[slot]);
+           //INFO("local get variable %d %s", slot,frame->task->name.c_str());
             push(frame->slots[slot]);
 
             break;
@@ -1204,40 +1207,43 @@ u8 Task::Run()
                 Process *process = vm->AddProcess(name);
                 process->chunk= new Chunk(callTask->chunk);
                 process->init_frames();//prepare frames 4 functions
-                for (size_t i=0;i<this->constants.size();i++)
-                {
-                    process->constants.push_back(callTask->constants[i]);
-                }
-                process->set_defaults();//local variables x,y, ... etc
+                //process->set_defaults();//local variables x,y, ... etc
 
-        
-                
-                for (int i = argCount; i >= 0; i--)
-                {
-                    Value arg = pop();
-                    process->frames[0].slots[process->localCount + i] = arg;
-                }
-                //frame->slots = stackTop - argCount -1;
-                
-                process->disassembleCode(name);
-                if (this->type == ObjectType::OPROCESS)
-                {
-                    process->set_parent(static_cast<Process*>(this));
+                int top = callTask->constants.size();
+
+                    for (int i = argCount; i >= 0; i--)
+                    {
+                        Value arg = pop();
+                        process->frames[0].slots[i] = arg;
+                    }
+                    
+                    for (size_t i = argCount + 1; i < callTask->constants.size(); i++)
+                    {
+                     //   process->frames[0].slots[i] = callTask->constants[i];
+                      //  process->constants[i] = callTask->constants[i];
+                        printValue(callTask->constants[i]);
+                    }
+
+                    frame->slots = stackTop - argCount - 1;
+                    process->disassembleCode(name);
+                  if (this->type == ObjectType::OPROCESS)
+                  {
+                      process->set_parent(static_cast<Process *>(this));
                 }
                 
 
                 vm->run_process.push_back(process);
                 
                // PrintStack();
-                break;
+                continue;
         }
         case OpCode::RETURN_PROCESS:
         {
            
             
            // disassembleCode(name.c_str());
-          //  INFO("Process RETURN %s ", name.c_str());
-           // PrintStack();
+            INFO("Process RETURN %s ", name.c_str());
+            PrintStack();
             
         
 
