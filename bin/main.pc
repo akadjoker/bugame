@@ -1,24 +1,74 @@
 program teste;
 
+var maxX=screenWidth-40;
+var maxY=screenHeight-40;
+var minX=40;
+var minY=40;
+var gravity = 0.5;
 
-process teste(a,b,c)
+process bunny()
 {
-
-    var i=0;
-    var j=2;
-    var t=1;
-
-    print(i);
-
-    print(a);
-    print(b);
-    print(c);
-    
    
- 
+    x = mouse_x();
+    y = mouse_y();
+    var speedX=rand()*8;
+    var speedY=rand()*5 -2.5;
+    var life=0;
+    loop 
+    {
+        
+        x = x + speedX;
+        y = y + speedY;
+
+        speedY = speedY + gravity;
+
+        if (x > maxX)
+        {
+            speedX = speedX + -1;
+            x = maxX;
+        } else
+        if(x<minX)
+        {
+            speedX = speedX * -1;
+            x = minX;
+        }
+
+        if (y> maxY)
+        {
+            speedY = speedY * -0.8;
+            y = maxY;
+            if (rand()>0.5)
+            {
+                speedY = speedY -3  * rand()*4;
+            }
+        }else
+        if(y<minY)
+        {
+            speedY=0;
+            y=minY;
+        }
+
+       
+      
+         
+    }
+
 }
 
-teste("luis","aka","djoker");
+process game()
+{
+    var i=0;
+    loop 
+    {
+        
+      if (mouse_down(0))
+      {
+            bunny();
+      }
+
+         
+    }
+}
 
 
-print("end prgram");
+game();

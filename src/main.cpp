@@ -5,6 +5,7 @@
 #include "Config.hpp"
 #include "Utils.hpp"
 #include "Vm.hpp"
+#include <raylib.h>
 
 
 bool Halt = false;
@@ -17,6 +18,92 @@ void Native_TraceLog(int logLevel, const char *text, va_list args)
 }
 
 
+//**************************************************************************************************************** */
+Texture2D bunnyTex;
+
+
+
+
+
+void instance_create(Instance *instance)
+{
+   
+  //  INFO("Create instance: %s at %d %d %d", instance->name.c_str(), instance->locals[IX], instance->locals[IY], instance->locals[IGRAPH]);
+}
+void instance_destroy(Instance *instance)
+{
+   
+   // INFO("Destroy instance: %s at %d %d %d", instance->name.c_str(), instance->locals[IX], instance->locals[IY], instance->locals[IGRAPH]);
+}
+
+void process_exec(Instance *instance)
+{
+   //DrawCircle(instance->locals[IX], instance->locals[IY], 10, RED);
+    DrawTexture(bunnyTex, instance->locals[IX], instance->locals[IY],WHITE);
+    //INFO("Process exec instance: %s at %d %d %d", instance->name.c_str(), instance->locals[IX], instance->locals[IY], instance->locals[IGRAPH]);
+}
+
+static int nave_key_down(VirtualMachine *vm, int argc, Value *args)
+{
+
+    vm->push(BOOLEAN(IsKeyDown(AS_INTEGER(args[0]))));
+
+    return 1;
+}
+
+static int nave_key_press(VirtualMachine *vm, int argc, Value *args)
+{
+    vm->push_bool(IsKeyPressed(AS_INTEGER(args[0])));
+    return 1;
+}
+
+static int native_mouse_down(VirtualMachine *vm, int argc, Value *args)
+{
+    vm->push(BOOLEAN(IsMouseButtonDown(AS_INTEGER(args[0]))));
+    return 1;
+}
+
+static int native_mouse_press(VirtualMachine *vm, int argc, Value *args)
+{
+    vm->push_bool(IsMouseButtonPressed(AS_INTEGER(args[0])));
+    return 1;
+}
+
+static int native_mouse_x(VirtualMachine *vm, int argc, Value *args)
+{
+    vm->push(NUMBER((double)GetMouseX()));
+    return 1;
+}
+
+static int native_mouse_y(VirtualMachine *vm, int argc, Value *args)
+{
+    vm->push(NUMBER((double)GetMouseY()));
+    return 1;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float memoryInMB(size_t bytes)
+{
+    return static_cast<float>(bytes) / (1024.0f * 1024.0f);
+}
+
+float memoryInKB(size_t bytes)
+{
+    return static_cast<float>(bytes) / 1024.0f;
+}
+
+const char *memoryIn(size_t bytes)
+{
+    if (bytes >= 1.0e6)
+    {
+        return TextFormat("%.2f MB", memoryInMB(bytes));
+    }
+    else if (bytes >= 1.0e3)
+    {
+        return TextFormat("%.2f KB", memoryInKB(bytes));
+    }
+    return TextFormat("%zu bytes", bytes);
+}
 
 
 inline void PrintValue(Value value)
@@ -159,20 +246,82 @@ int main_game()
     vm.registerFunction("toString", native_to_string, 1);
   
 
+    vm.registerFunction("key_down", nave_key_down, 1);
+    vm.registerFunction("key_press", nave_key_press, 1);
+
+    vm.registerFunction("mouse_down", native_mouse_down, 1);
+    vm.registerFunction("mouse_press", native_mouse_press, 1);
+
+    vm.registerFunction("mouse_x", native_mouse_x, 0);
+    vm.registerFunction("mouse_y", native_mouse_y, 0);
+
     vm.registerFunction("rand", native_rand, 0);
 
+
+    vm.registerInteger("screenWidth", screenWidth);
+    vm.registerInteger("screenHeight", screenHeight);
+
+
+      vm.hooks.instance_create_hook = instance_create;
+    vm.hooks.instance_destroy_hook = instance_destroy;
+    vm.hooks.process_exec_hook = process_exec;
 
 
     bool sucess = vm.Compile(std::move(str));
     INFO("Compiled: %s", sucess ? "success" : "fail");
 
-        if (sucess)
-        {
-            
+
+
+    SetTraceLogLevel(LOG_NONE);
+    //   SetTraceLogCallback(Native_TraceLog);
+
+    InitWindow(screenWidth, screenHeight, "BuLang with Raylib");
+    SetTargetFPS(1000000);
+
+
+     bunnyTex = LoadTexture("wabbit_alpha.png");
+
+        if (!sucess)            return 0;
+
             vm.Run();
+
+        
+
+    while (!WindowShouldClose() && sucess)
+    {
+        // if (!sucess) break;
+       // if(done )
+        //    break;
+
+        BeginDrawing();
+
+        ClearBackground(BLACK);
+
+         if (sucess)
+        {
+          
             vm.Update();
         }
+        
+        
 
+
+        DrawRectangle(0, 0, 380, 50, GREEN);
+        DrawFPS(10, 10);
+        if (done)
+        {
+            DrawText("All tasks done", 10, 60, 20, RED);
+        }
+        DrawText(TextFormat("Objects: %d mem: %s", (int)Arena::as().get_total_objects(), memoryIn(Arena::as().get_bytes_allocated())), 10, 30, 20, RED);
+   
+
+        EndDrawing();
+    }
+    
+
+
+    UnloadTexture(bunnyTex);
+    CloseWindow();
     
 
     return 0;

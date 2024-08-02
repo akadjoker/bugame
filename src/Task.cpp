@@ -94,6 +94,7 @@ void Task::exitScope(int line)
 {
     
     scopeDepth--;
+  //  if (is_persistent) return;
     while (localCount > 0 && (locals[localCount - 1].depth > scopeDepth  && !locals[localCount - 1].isArg) )
     {
      //   INFO("End scope %d %d", scopeDepth,localCount);
@@ -119,7 +120,7 @@ int Task::addLocal(const char *name, u32 len,bool isArg)
     local->isArg = isArg;
     if (isArg)
     {
-       constants.push_back(std::move(NONE()));
+      // constants.push_back(std::move(NONE()));
     }
     
   //  INFO("Add local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
@@ -150,7 +151,7 @@ int Task::resolveLocal(const String &string)
     for (int i = localCount - 1; i >= 0; i--) 
     {
         Local *local = &locals[i];
-        INFO("Resolve local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
+       // INFO("Resolve local %s in scope %d task %s", local->name, local->depth, this->name.c_str());
         if (matchString(local->name, string.c_str(), string.length()))
         {
             if (local->depth == -1) 
@@ -179,10 +180,17 @@ bool Task::setLocalVariable(const String &string, int index)
 }
 void Task::set_process()
 {
-    //  setLocalVariable("graph", IGRAPH);
-    //  setLocalVariable("x", IX);
-    //  setLocalVariable("y", IY);
-    //  setLocalVariable("id", IID);
+ 
+    // addConstString("id");
+    // addConstString("graph");
+    // addConstString("x");
+    // addConstString("y");
+
+    setLocalVariable("id", IID);
+    setLocalVariable("graph", IGRAPH);
+    setLocalVariable("x", IX);
+    setLocalVariable("y", IY);
+
      
 }
 Value Task::top()
@@ -233,6 +241,8 @@ Task::Task(VirtualMachine *vm, const char *name) : Traceable()
     m_done = false;
     is_main = false;
     PanicMode = false;
+
+
     this->vm = vm;
     ID = nextID++;
     type = ObjectType::OTASK;
@@ -261,6 +271,7 @@ Task::Task(VirtualMachine *vm, const char *name) : Traceable()
 Task::~Task()
 {
 
+   
     if (chunk!=nullptr)
     {
         delete chunk;
@@ -486,6 +497,8 @@ u32 Task::disassembleInstruction(u32 offset)
         return simpleInstruction("NOW", offset);
     case OpCode::FRAME:
         return simpleInstruction("FRAME", offset);
+    case OpCode::CLONE:
+        return simpleInstruction("CLONE", offset);
     case OpCode::ADD:
         return simpleInstruction("ADD", offset);
     case OpCode::SUBTRACT:
@@ -668,7 +681,7 @@ void Task::Done()
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
 
-static const size_t instructionsPerFrame = 120;
+static const size_t instructionsPerFrame = 30;
 u8 Task::Run()
 {
     
@@ -685,39 +698,16 @@ u8 Task::Run()
      (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 #define READ_CONSTANT() (frame->task->constants[READ_BYTE()])
     
+ size_t instructionsExecuted = 0;
 
-    // printf("Count = %d [",chunk.count);
-    // for (size_t i = 0; i < chunk.count; i++)
-    // {
-    //     if (i != chunk.count - 1)
-    //     {
-    //         printf("%d,", chunk.code[i]);
-    //     } else
-    //     {
-    //         printf("%d",chunk.code[i]);
-    //     }
-    // }
 
-    // printf("]\n");
-
-    while (true)
+     while(instructionsExecuted < instructionsPerFrame)
     {
 
-      //  disassembleInstruction((int)(frame->ip - frame->task->chunk.code));
-       //INFO("runt task %s", frame->task->name.c_str());
+
         u8 instruction = READ_BYTE();
         int line = frame->task->chunk->lines[instruction];
-        //vm->currentTask = frame->task;
-
-        // if (instruction == JUMP || instruction == JUMP_IF_FALSE || instruction == JUMP_IF_TRUE || instruction == JUMP_BACK)
-        // {
-        //     uint16_t offset = (instruction << 8) | instruction;
-        //     INFO("JUMP %d ", offset);
-
-        // } else
-        // {
-        //   printf("%s - %d\n", OpCodeNames[instruction].c_str(),instruction);
-        // }
+ 
 
         switch ((OpCode)instruction)
         {
@@ -1028,6 +1018,15 @@ u8 Task::Run()
         {
             u8 slot = READ_BYTE();
 
+            if (type==ObjectType::OPROCESS)
+            {
+                if (slot ==IID)
+                {
+                    vm->Error("Variable  ID is read-only");
+                    return ABORTED;
+                }
+            }
+
             frame->slots[slot]= peek(0);
             
 
@@ -1207,30 +1206,24 @@ u8 Task::Run()
                 Process *process = vm->AddProcess(name);
                 process->chunk= new Chunk(callTask->chunk);
                 process->init_frames();//prepare frames 4 functions
-                //process->set_defaults();//local variables x,y, ... etc
+                process->set_defaults();//local variables x,y, ... etc
+                process->constants = callTask->constants;
 
-                int top = callTask->constants.size();
+                for (int i = argCount - 1; i >= 0; i--)
+                {
+                    Value arg = peek(i);
+                    process->push(arg);
+                }
+                pop(argCount);
 
-                    for (int i = argCount; i >= 0; i--)
-                    {
-                        Value arg = pop();
-                        process->frames[0].slots[i] = arg;
-                    }
-                    
-                    for (size_t i = argCount + 1; i < callTask->constants.size(); i++)
-                    {
-                     //   process->frames[0].slots[i] = callTask->constants[i];
-                      //  process->constants[i] = callTask->constants[i];
-                        printValue(callTask->constants[i]);
-                    }
 
                     frame->slots = stackTop - argCount - 1;
-                    process->disassembleCode(name);
+                   // callTask->disassembleCode(name);
+                   // process->disassembleCode(name);
                   if (this->type == ObjectType::OPROCESS)
                   {
                       process->set_parent(static_cast<Process *>(this));
-                }
-                
+                    }
 
                 vm->run_process.push_back(process);
                 
@@ -1241,9 +1234,16 @@ u8 Task::Run()
         {
            
             
-           // disassembleCode(name.c_str());
-            INFO("Process RETURN %s ", name.c_str());
-            PrintStack();
+          // disassembleCode(name.c_str());
+          // INFO("Process RETURN %s ", name.c_str());
+           // pop((constants.size() - 1) + DEFAULT_COUNT);
+            int count = (stackTop - frame->slots);
+            for (int i = 0; i < count; i++)
+            {
+                pop();
+            }
+            
+           // PrintStack();
             
         
 
@@ -1254,6 +1254,11 @@ u8 Task::Run()
         {
             INFO("FRAME %s", name.c_str());
 
+            break;
+        }
+        case OpCode::CLONE:
+        {
+            INFO("CLONE %s", name.c_str());
             break;
         }
 
@@ -1269,6 +1274,18 @@ u8 Task::Run()
 
             return ABORTED;
         }
+        }
+        instructionsExecuted++;
+
+       if (type == ObjectType::OPROCESS)
+       {
+            
+       }
+            
+
+        if (instructionsExecuted >= instructionsPerFrame)
+        {
+            return RUNNING;
         }
     }
 #undef READ_BYTE

@@ -765,9 +765,6 @@ void Parser::processDeclaration()
 
     hasReturned = false;
     task->argsCount = 0;
-    task->declareVariable(rawName, true);
-    
-
 
     if (!match(TokenType::RIGHT_PAREN))
     {
@@ -775,8 +772,7 @@ void Parser::processDeclaration()
         {
             Token name = consume(TokenType::IDENTIFIER, "Expect parameter name");
             task->declareVariable(name.lexeme, true);
-            task->argsCount++;
-          
+            task->argsCount++;          
             
         } while (match(TokenType::COMMA));
     }
@@ -903,9 +899,6 @@ void Parser::printStatement()
 
 void Parser::variableDeclaration()
 {
-
-   
-
     bool global = IsGlobalScope();
     Token name = consume(TokenType::IDENTIFIER, "Expect variable name");
     
@@ -935,18 +928,13 @@ void Parser::variableDeclaration()
         globals.insert(name.lexeme.c_str(), index);
     }
     else
-    {
-        
-        
+    {       
+       
         if (currentTask->declareVariable(name.lexeme,false)==-1)
         {
-            Error("Can not use '"+ name.lexeme+"' as local variable .");
+            Error("Can not declare '"+ name.lexeme+"' as local variable .");
             return;
-        } else 
-        {
-                INFO("SET LOCAL Variable: %s depth:", name.lexeme.c_str());
-        }
-        
+        }         
     }
    
 
@@ -955,23 +943,20 @@ void Parser::variableDeclaration()
 
 void Parser::variable(bool canAssign)
 {
-    Token name = previous();
-    Value value = STRING(name.lexeme);
-
+        Token name = previous();
+        Value value = STRING(name.lexeme);
     
-    
-    bool global = IsGlobalScope();//is not 0 'global'
-    int index = currentTask->resolveLocal(name.lexeme); //is not in locals
-    if (index == -1 && !global)
-    {
-        if (globals.contains(name.lexeme.c_str()))//global but local have scope depth +1 
-            global = true;
-    }
+        bool global = IsGlobalScope();//is not 0 'global'
+        int index = currentTask->resolveLocal(name.lexeme); //is not in locals
+        if (index == -1 && !global)
+        {
+            if (globals.contains(name.lexeme.c_str()))//global but local have scope depth +1 
+                global = true;
+        }
 
         u8 arg = 0;
         if (global)
-        {
-              
+        {             
              arg = makeConstant(std::move(value));
         }
 
@@ -980,14 +965,10 @@ void Parser::variable(bool canAssign)
             expression();
             if (global)
             {
-                
                 emitBytes(OpCode::GLOBAL_ASSIGN, arg);
             }
             else
-            {
-                 
-
-                   
+            {                   
                 if (index == -1)
                 {
                     if (globals.contains(name.lexeme.c_str()))
@@ -1009,8 +990,7 @@ void Parser::variable(bool canAssign)
         Error("Invalid assignment target");
     }
     else
-    {
-       
+    {      
       
         if (global)
         {
@@ -1029,9 +1009,10 @@ void Parser::variable(bool canAssign)
                     emitBytes(OpCode::GLOBAL_GET, arg);
                     return;
                 }
-                Error("Can not use local '"+ name.lexeme+"' variable .");
+                Error("Variable  '"+ name.lexeme+"' is not declared .");
                 return;
             }
+                    
             emitBytes(OpCode::LOCAL_GET, index);
         }
         
@@ -1167,6 +1148,18 @@ void Parser::frameStatement()
 {
     consume(TokenType::SEMICOLON, "Expect ';' after 'frame'");
     emitByte(OpCode::FRAME);
+}
+
+void Parser::typeStatement()
+{
+    consume(TokenType::SEMICOLON, "Expect ';' after 'type'");
+    emitByte(OpCode::TYPE);
+}
+
+void Parser::cloneStatement()
+{
+    consume(TokenType::SEMICOLON, "Expect ';' after 'clone'");
+    emitByte(OpCode::CLONE);
 }
 
 void Parser::callStatement(bool native)

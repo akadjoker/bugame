@@ -89,6 +89,8 @@ enum class TokenType
     DEFAULT,
     LOOP,
     FRAME,
+    TYPE,
+    CLONE,
     CLASS,
     THIS,
 
@@ -172,6 +174,7 @@ inline String tknString(TokenType type)
         case TokenType::DEFAULT:       return "DEFAULT";
         case TokenType::LOOP:          return "LOOP";
         case TokenType::FRAME:         return "FRAME";
+        case TokenType::CLONE:         return "CLONE";
         case TokenType::CLASS:         return "CLASS";
         case TokenType::THIS:          return "THIS";
         case TokenType::PRINT:         return "PRINT";

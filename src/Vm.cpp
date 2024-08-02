@@ -478,7 +478,7 @@ const String OpCodeNames[] =
 u8 VirtualMachine::Run()
 {
      mainTask->init_frames();
-     mainTask->disassembleCode("main");
+  //   mainTask->disassembleCode("main");
      return mainTask->Run();
 }
 

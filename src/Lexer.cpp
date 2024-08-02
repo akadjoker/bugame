@@ -173,6 +173,8 @@ void Lexer::initialize()
   keywords.insert("print", TokenType::PRINT);
   keywords.insert("now", TokenType::NOW);
   keywords.insert("frame", TokenType::FRAME);
+  keywords.insert("clone", TokenType::CLONE);
+  
   keywords.insert("class", TokenType::CLASS);
   keywords.insert("this", TokenType::THIS);
 

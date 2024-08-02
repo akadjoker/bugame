@@ -45,7 +45,7 @@ elseif(CMAKE_BUILD_TYPE MATCHES Release)
     target_link_options(main PRIVATE -O3 -march=native -flto -funroll-loops -DNDEBUG)
 endif()
 
-#target_link_libraries(main raylib)
+target_link_libraries(main raylib)
 
 if (WIN32)
     target_link_libraries(main Winmm.lib)

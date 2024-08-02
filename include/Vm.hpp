@@ -17,6 +17,8 @@ enum OpCode
     PRINT,
     NOW,
     FRAME,
+    TYPE,
+    CLONE,
     PROGRAM,
 
     ADD,
@@ -164,14 +166,14 @@ private:
     
 
 
-    Value stack[STACK_MAX];
+
     Value* stackTop;
 
     int scopeDepth;
 
     bool mainTask;
 
-
+   
  
     u8 argsCount;
 
@@ -180,12 +182,7 @@ private:
     void beginScope();
     void exitScope(int line);
     
-    bool push(Value v);
-    Value pop();
-    Value peek(int offset = 0);
-    Value top();
-    void pop(u32 count);
-    void PrintStack();
+
 
    // u8 read_byte();
    //u16 read_short();
@@ -223,11 +220,11 @@ private:
 protected:
     String name;
     u64 ID;
-    Frame frames[MAX_FRAMES];
+
     int frameCount;
     Local locals[UINT8_MAX];
     int localCount;
-    
+    Value stack[STACK_MAX];
     bool m_done;
     Task *parent;
     VirtualMachine *vm;
@@ -235,12 +232,20 @@ protected:
     bool isReturned;
     Chunk *chunk;
     Vector<Value> constants;
+     Frame frames[MAX_FRAMES];
 
     int declareVariable(const String &string,bool isArg=false);
     int addLocal(const char* name,u32 len,bool isArg=false);
     int resolveLocal(const String &string);
     bool setLocalVariable(const String &string, int index);
     void set_process();
+
+        bool push(Value v);
+    Value pop();
+    Value peek(int offset = 0);
+    Value top();
+    void pop(u32 count);
+    void PrintStack();
 
 public:
     Task(VirtualMachine *vm, const char *name);
@@ -277,16 +282,18 @@ struct FunctionObject : public Task
     
 };
 
+
+const int DEFAULT_COUNT = 4;
 const int IID    = 0;
-const int IX     = 1;
-const int IY     = 2;
-const int IGRAPH = 3;
+const int IGRAPH = 1;
+const int IX     = 2;
+const int IY     = 3;
 
 
 struct Instance 
 {
     u32 ID;
-    s32 locals[32];
+    double locals[32];
     String name;
     Instance *father;
     Instance *son;

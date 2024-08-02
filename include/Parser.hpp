@@ -97,6 +97,8 @@ private:
     void continueStatement();
     void returnStatement();
     void frameStatement();
+    void typeStatement();
+    void cloneStatement();
     void callStatement(bool native);
     u8 argumentList(bool canAssign);
     void callProcess();
