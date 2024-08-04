@@ -27,7 +27,8 @@ process bunny()
     y = mouse_y();
     var speedX=rand()*8;
     var speedY=rand()*5 -2.5;
-    var life=100;
+    var life=1000;
+
     loop 
     {
 
@@ -72,12 +73,14 @@ process bunny()
          
     }
 
+
 }
 
 process game()
 {
     var i=0;
     var down=true;
+    var nome ="GAME";
  
     loop 
     {   
@@ -103,9 +106,7 @@ process game()
     }
 }
 
- bunny();
+game();
 
-var id= game();
-print(id);
 
 print("exist");

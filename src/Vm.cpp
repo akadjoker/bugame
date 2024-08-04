@@ -276,34 +276,40 @@ bool VirtualMachine::IsReady()
 
 bool VirtualMachine::Update()
 {
-    if (panicMode || isHalt || run_process.size() == 0)
+    if (panicMode || isHalt )
         return false;
 
-
-
-
-    for (size_t i = 0; i < run_process.size(); i++)
+    Process *task = processList.head;
+    while (task)
     {
-        Task *task = static_cast<Task *>(run_process[i]);
+        Process *next = task->next;
+
         u8 state = task->Run();
-        if (state==ABORTED || state == TERMINATED || state == FINISHED)
+        if (state == ABORTED || state == TERMINATED || state == FINISHED)
         {
-          run_process.erase(i);
-          processDeletor.push_back(task);
-          i--;
+            if (processList.remove(task))
+            {
+                task->remove();
+                task->next = nullptr;
+                task->prev = nullptr;
+                cleaner.add(task);
+            }
+         
+        }
+        if (state == RUNNING)
+        {
+            task->update();
         }
 
-        task->update();
-        
+        task = next;
     }
 
-    for (size_t i = 0; i < processDeletor.size(); i++)
-    {
-        delete processDeletor[i];
-    }
-    processDeletor.clear();
 
-    return run_process.size() == 0;
+  //  if (cleaner.count() > 256)
+        cleaner.clear(true);
+
+    Arena::as().gc();
+    return processList.count() == 0;
 }
 
 VirtualMachine::~VirtualMachine()
@@ -332,11 +338,6 @@ void VirtualMachine::Clear()
     taskes.clear();
     taskesMap.clear();
 
-    for (size_t i = 0; i < run_process.size(); i++)
-    {
-        delete run_process[i];
-    }
-    run_process.clear();
 
     NativeFunctionObject* nativeOP = nativeFunctions.first();
     while (nativeOP)
@@ -345,13 +346,10 @@ void VirtualMachine::Clear()
         nativeOP = nativeFunctions.next();
     }
     nativeFunctions.clear();
-    for (size_t i = 0; i < processDeletor.size(); i++)
-    {
-        delete processDeletor[i];
-    }
-    processDeletor.clear();
 
-    run_process.clear();
+    cleaner.clear(true);
+    processList.clear(true);
+
     global->clear();
     mainTask = nullptr;
     currentTask = nullptr;

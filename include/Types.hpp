@@ -16,15 +16,14 @@ struct Traceable
 {
     bool marked;
     u64 id;
-    Traceable *next;
-    Traceable *prev;
+
     ObjectType type;
 
     Traceable();
 
     virtual ~Traceable();
 
-    virtual void mark() { marked = true; }
+    virtual void mark()  { marked = true; }
     virtual void unmark() { marked = false; }
 
     static void *operator new(size_t size);
@@ -171,7 +170,7 @@ public:
     int *lines;
     u32 count;
 };
-class List
+class TraceList
 {
 private:
     Traceable **m_data;
@@ -181,8 +180,8 @@ private:
     void resize(size_t size);
 
 public:
-    List(size_t capacity = 16);
-    ~List();
+    TraceList(size_t capacity = 16);
+    ~TraceList();
 
     void reserve(size_t capacity);
 
@@ -258,7 +257,7 @@ struct Entry
 class Set
 {
 private:
-    List m_data;
+    TraceList m_data;
 
 public:
     Set(size_t initial_capacity = 10);
@@ -284,12 +283,14 @@ private:
     Traceable *head;
     Traceable *tail;
 
-    Traceable *headRemove;
+
 
     clock_t start_time;
 
     u64 next_id;
-    List objects;
+    TraceList objects;
+    TraceList roots;
+
 
     Arena();
     ~Arena();
@@ -325,5 +326,5 @@ public:
 
     void gc();
 
-    List roots;
+
 };

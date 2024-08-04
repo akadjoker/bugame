@@ -176,7 +176,7 @@ private:
 
  
 
- Value *stackTop;
+
 
  int scopeDepth;
 
@@ -224,6 +224,7 @@ private:
  Local locals[UINT8_MAX];
  int localCount;
  Value stack[STACK_MAX];
+  Value *stackTop;
  bool m_done;
  Task *parent;
  VirtualMachine *vm;
@@ -317,16 +318,15 @@ struct Instance
 class ProcessList
 {
 private:
-    Process *head;
-    Process *tail;
+
     u32     m_count;
 
 public:
     ProcessList();
     ~ProcessList();
 
-    Process *first() const { return head; }
-    Process *last() const { return tail; }
+    Process *head;
+    Process *tail;
 
 
     Process *by_priority(u32 priority);
@@ -338,7 +338,7 @@ public:
     
     void insert(Process *p);
     
-    Process *remove(Process *p);
+    bool remove(Process *p);
 
     u32 count() const { return m_count; }
 };
@@ -420,8 +420,7 @@ class VirtualMachine
 
     HashTable<NativeFunctionObject *> nativeFunctions;
     HashTable<FunctionObject *> functionsMap;
-
-    Vector<Task *> processDeletor;
+    ProcessList cleaner;
 
 
     Scope *global;
@@ -467,7 +466,8 @@ class VirtualMachine
 
     bool isGlobalScope();
 
-    Vector<Task*> run_process;
+  //  Vector<Process*> run_process;
+    ProcessList processList;
 
 
     
@@ -527,7 +527,7 @@ public:
     bool   pop_nil();
 
 
-    size_t size() { return run_process.size(); }
+    size_t size() { return processList.count(); }
 
     Hook hooks;
 };

@@ -42,8 +42,6 @@ Traceable::Traceable()
 {
     marked = false;
     id = 0;
-    next = nullptr;
-    prev = nullptr;
     type = ObjectType::UNDEFINED;
    //  printf("Create Traceable\n");
     Arena::as().queue(this);
@@ -51,7 +49,7 @@ Traceable::Traceable()
 
 Traceable::~Traceable()
 {
-   //   printf("Destroy Traceable %lld\n",id);
+     // printf("Destroy Traceable %ld\n",id);
 }
 
 void *Traceable::operator new(size_t size)
@@ -71,10 +69,11 @@ Arena::Arena()
     head = nullptr;
     tail = nullptr;
     next_id = 0;
-    treshold = 1024 * 8;
+    treshold = 128;
+   // 1024 * 8;
     roots.reserve(1024 * 4);
     start_time = clock();
-    headRemove = nullptr;
+
 }
 
 Arena::~Arena()
@@ -89,48 +88,9 @@ double Arena::get_elapsed_time()
 
 void Arena::remove(Traceable *n)
 {
-    if (n == nullptr)
-        return;
-
-    // Se o nó é o head
-    if (n == head)
-    {
-        head = n->next;
-        if (head != nullptr)
-        {
-            head->prev = nullptr;
-        }
-    }
-    else
-    {
-        n->prev->next = n->next;
-    }
-
-    // Se o nó é o tail
-    if (n == tail)
-    {
-        tail = n->prev;
-        if (tail != nullptr)
-        {
-            tail->next = nullptr;
-        }
-    }
-    else
-    {
-        if (n->next != nullptr)
-        {
-            n->next->prev = n->prev;
-        }
-    }
-
-    delete n;
+     roots.remove(n);
 }
 
-void Arena::remove_root(Traceable *obj)
-{
-    roots.remove(obj);
-    remove(obj);
-}
 
 void Arena::mark_from(Traceable *obj)
 {
@@ -152,55 +112,17 @@ void Arena::mark()
 
 void Arena::sweep()
 {
-    Traceable *temp = head;
-    while (temp != nullptr)
-    {
-        if (!temp->marked)
-        {
-            Traceable *nodeToDelete = temp;
-            temp = temp->next;
-            remove_root(nodeToDelete);
-        }
-        else
-        {
-            temp->marked = false; // Resetar o marcador para o próximo ciclo
-            temp = temp->next;
-        }
-    }
+    
 }
 
 void Arena::gc()
 {
 
-    // int count = 0;
+  //  if (bytesAllocated < treshold)
+   //     return;
 
-    // if (get_elapsed_time() >= 0.5)
-    // {
-    //    // printf(" %f \n", get_elapsed_time());
-    //     start_time = clock();
-    //     if (objects.size() > 0)
-    //     {
-    //         Traceable *temp = objects.pop();
-    //         delete temp;
-    //     }
-    //     // Traceable *temp;
-    //     // while (headRemove != nullptr)
-    //     // {
-    //     //     if (count > 100) break;
-    //     //     temp = headRemove;
-    //     //     headRemove = headRemove->next;
-    //     //     delete temp;
-    //     //     count++;
-    //     //     // printf("GC: %lu objects, %lu bytes\n", (unsigned long)totalObjects, (unsigned long)bytesAllocated);
-    //     // }
-
-    // }
-
-    if (bytesAllocated < treshold)
-        return;
-
-    mark();
-    sweep();
+    //mark();
+   // sweep();
 
     //  stats();
 
@@ -209,29 +131,18 @@ void Arena::gc()
 
 void Arena::clear()
 {
+    for (u32 i = 0; i < roots.size(); i++)
+    {
+        Traceable *obj = roots[i];
+        delete obj;
+    }
     roots.clear();
-    Traceable *temp;
-    while (head != nullptr)
-    {
-        temp = head;
-        head = head->next;
-        delete temp;
-    }
 
-    while (headRemove != nullptr)
-    {
-
-        temp = headRemove;
-        headRemove = headRemove->next;
-        delete temp;
-    }
 
     stats();
 }
 
-void Arena::cleanup()
-{
-}
+
 
 void Arena::stats()
 {
@@ -266,26 +177,18 @@ void Arena::queue(Traceable *obj)
     if (obj == nullptr)
         return;
 
+    obj->mark();
     obj->id = next_id++;
+    roots.push_back(obj);
 
-    if (head == nullptr)
-    {
-        head = tail = obj;
-    }
-    else
-    {
-        obj->prev = tail;
-        tail->next = obj;
-        tail = obj;
-    }
 }
 
-void List::reserve(size_t new_capacity)
+void TraceList::reserve(size_t new_capacity)
 {
     resize(new_capacity);
 }
 
-void List::resize(size_t size)
+void TraceList::resize(size_t size)
 {
     Traceable **new_data = new Traceable *[size];
     std::memcpy(new_data, m_data, m_size * sizeof(Traceable *));
@@ -294,7 +197,7 @@ void List::resize(size_t size)
     m_capacity = size;
 }
 
-List::List(size_t capacity)
+TraceList::TraceList(size_t capacity)
 {
 
     m_capacity = capacity;
@@ -303,13 +206,13 @@ List::List(size_t capacity)
     std::memset(m_data, 0, m_capacity * sizeof(Traceable *));
 }
 
-List::~List()
+TraceList::~TraceList()
 {
     delete[] m_data;
     m_data = nullptr;
 }
 
-bool List::remove(Traceable *obj)
+bool TraceList::remove(Traceable *obj)
 {
 
     if (obj == nullptr)
@@ -339,7 +242,7 @@ bool List::remove(Traceable *obj)
     return false;
 }
 
-void List::push_back(Traceable *obj)
+void TraceList::push_back(Traceable *obj)
 {
     if (m_size == m_capacity)
     {
@@ -349,7 +252,7 @@ void List::push_back(Traceable *obj)
     m_size++;
 }
 
-Traceable *List::at(size_t index)
+Traceable *TraceList::at(size_t index)
 {
     if (index >= m_size)
     {
@@ -358,7 +261,7 @@ Traceable *List::at(size_t index)
     return m_data[index];
 }
 
-Traceable *List::remove_at(size_t index)
+Traceable *TraceList::remove_at(size_t index)
 {
     Traceable *result = nullptr;
     if (index >= m_size)
@@ -376,7 +279,7 @@ Traceable *List::remove_at(size_t index)
     return result;
 }
 
-bool List::contains(Traceable *obj)
+bool TraceList::contains(Traceable *obj)
 {
     if (obj == nullptr)
         return false;
@@ -403,7 +306,7 @@ bool List::contains(Traceable *obj)
     return false;
 }
 
-Traceable *List::pop()
+Traceable *TraceList::pop()
 {
     if (m_size == 0)
     {
@@ -450,30 +353,34 @@ bool Set::remove(Traceable *obj)
     return m_data.remove(obj);
 }
 
-StringObject::StringObject(const String &str)
+StringObject::StringObject(const String &str):Traceable()
 {
     string = str;
     type = ObjectType::OSTRING;
+
    // INFO("Create string: %s", string.c_str());
 }
 
-StringObject::StringObject(const char *str)
+StringObject::StringObject(const char *str):Traceable()
 {
     string = String(str);
     type = ObjectType::OSTRING;
+
   //  INFO("Create string: %s", string.c_str());
 }
 
-StringObject::StringObject(double value)
+StringObject::StringObject(double value):Traceable()
 {
     string = String(value);
     type = ObjectType::OSTRING;
+ 
 }
 
-StringObject::StringObject(int value)
+StringObject::StringObject(int value):Traceable()
 {
     string = String(value);
     type = ObjectType::OSTRING;
+
 }
 
 StringObject::~StringObject()

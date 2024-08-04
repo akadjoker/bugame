@@ -98,7 +98,7 @@ void Task::exitScope(int line)
 }
 void *Task::operator new(size_t size)
 {
-    INFO("Allocate %d bytes", size);
+  //  INFO("Allocate %d bytes", size);
     return Arena::as().allocate(size);
 }
 
@@ -280,6 +280,11 @@ Task::~Task()
         chunk = nullptr;
     }
     
+   //  INFO("Destroy task: %s with id %d", name.c_str(),constants.size());
+
+
+     
+
     constants.clear();
 
 
@@ -687,7 +692,7 @@ static const size_t instructionsPerFrame = 25;
 u8 Task::Run()
 {
     
-    if (PanicMode)        return ABORTED;
+    if (PanicMode)         return ABORTED;
     if (isReturned)        return FINISHED;
 
  Frame* frame = &frames[frameCount - 1];        
@@ -726,8 +731,10 @@ u8 Task::Run()
          }
          case OpCode::POP:
          {
-             pop();
-             break;
+            pop();
+
+             
+            break;
          }
          case OpCode::TRUE:
          {
@@ -1150,7 +1157,7 @@ u8 Task::Run()
              frameCount--;
              if (frameCount == 0)
              {
-                 // frame->task->exitScope(line);
+                 isReturned = true;
                  INFO("main %s", frame->task->name.c_str());
                  PrintStack();
                  pop();
@@ -1216,7 +1223,8 @@ u8 Task::Run()
                  process->set_parent(static_cast<Process *>(this));
              }
 
-             vm->run_process.push_back(process);
+            // vm->run_process.push_back(process);
+             vm->processList.add(process);
              push(INTEGER((int)process->ID));
 
              // PrintStack();
@@ -1224,7 +1232,7 @@ u8 Task::Run()
          }
          case OpCode::RETURN_PROCESS:
          {
-
+             isReturned = true;
              // disassembleCode(name.c_str());
              // INFO("Process RETURN %s ", name.c_str());
              // pop((constants.size() - 1) + DEFAULT_COUNT);

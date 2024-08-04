@@ -10,20 +10,20 @@ extern void printValueln(const Value &v);
 
 void Process::set_parent(Process *p)
 {
-    father = p;
-    if (p)
-    {
+    // father = p;
+    // if (p)
+    // {
         
-        if (p->son)
-        {
-            p->son->bigBrother = this;
+    //     if (p->son)
+    //     {
+    //         p->son->bigBrother = this;
             
-            this->smallBrother = p->son;
-        }
+    //         this->smallBrother = p->son;
+    //     }
         
         
-        p->son = this;
-    }
+    //     p->son = this;
+    // }
 }
 
 Process::Process(VirtualMachine *vm, const char *name) : Task(vm, name)
@@ -51,8 +51,8 @@ Process::Process(VirtualMachine *vm, const char *name) : Task(vm, name)
 
 Process::~Process()
 {
- // INFO("Destroy process: %s", name.c_str());
-
+ 
+   
 }
 
 void Process::create()
@@ -154,6 +154,7 @@ ProcessList::ProcessList()
 {
     head = nullptr;
     tail = nullptr;
+    m_count = 0;
 }
 
 ProcessList::~ProcessList()
@@ -259,11 +260,11 @@ void ProcessList::insert(Process *p)
     ++m_count;
 }
 
-Process* ProcessList::remove(Process *n)
+bool ProcessList::remove(Process *n)
 {
-    if (n == nullptr) return nullptr;
-
-    // Se o nó é o head
+    if (!n) return false;
+    if (!head) return false;
+    if (n == head && n == tail) return false;
     if (n == head)
     {
         head = n->next;
@@ -294,8 +295,10 @@ Process* ProcessList::remove(Process *n)
         }
     }
 
-    --m_count;
-    return n;
+
+    --m_count; // Decrementa o contador de elementos
+
+    return true; // Retorna o próximo elemento
 
 }
 
