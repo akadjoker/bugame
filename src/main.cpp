@@ -94,6 +94,17 @@ float memoryInKB(size_t bytes)
 
 const char *memoryIn(size_t bytes)
 {
+
+    // const double KB = 1024;
+    // const double MB = 1024 * 1024;
+    //  if (tamanho < KB) {
+    //     TextFormat("%.2f bytes\n", tamanho);
+    // } else if (tamanho < MB) {
+    //     TextFormat("%.2f KB\n", tamanho / KB);
+    // } else {
+    //     printf("%.2f MB\n", tamanho / MB);
+    // }
+
     if (bytes >= 1.0e6)
     {
         return TextFormat("%.2f MB", memoryInMB(bytes));

@@ -1039,6 +1039,23 @@ void Parser::ifStatement()
     
     emitByte(OpCode::POP);
 
+
+ while (match(TokenType::ELIF))
+    {
+        consume(TokenType::LEFT_PAREN, "Expect '(' after 'elif'.");
+        expression();
+        consume(TokenType::RIGHT_PAREN, "Expect ')' after elif condition.");
+
+        thenJump = emitJump(OpCode::JUMP_IF_FALSE);
+        emitByte(OpCode::POP);
+        statement(); // Executa o bloco 'elif'
+
+        patchJump(elseJump);
+        elseJump = emitJump(OpCode::JUMP);
+        patchJump(thenJump);
+        emitByte(OpCode::POP);
+    }
+
    // printf("thenJump: %d elseJump %d:\n", thenJump, elseJump);
     if (match(TokenType::ELSE))
     {

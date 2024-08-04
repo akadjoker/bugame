@@ -45,13 +45,13 @@ Traceable::Traceable()
     next = nullptr;
     prev = nullptr;
     type = ObjectType::UNDEFINED;
-    // printf("Create Traceable\n");
+   //  printf("Create Traceable\n");
     Arena::as().queue(this);
 }
 
 Traceable::~Traceable()
 {
-    //  printf("Destroy Traceable %lld\n",id);
+   //   printf("Destroy Traceable %lld\n",id);
 }
 
 void *Traceable::operator new(size_t size)
@@ -463,12 +463,14 @@ StringObject::StringObject(const String &str)
 {
     string = str;
     type = ObjectType::OSTRING;
+   // INFO("Create string: %s", string.c_str());
 }
 
 StringObject::StringObject(const char *str)
 {
     string = String(str);
     type = ObjectType::OSTRING;
+  //  INFO("Create string: %s", string.c_str());
 }
 
 StringObject::StringObject(double value)
@@ -481,6 +483,11 @@ StringObject::StringObject(int value)
 {
     string = String(value);
     type = ObjectType::OSTRING;
+}
+
+StringObject::~StringObject()
+{
+    INFO("Delete string: %s", string.c_str());
 }
 
 NativeFunctionObject::NativeFunctionObject(NativeFunction func, const char *name, int arity) : func(func), name(name), arity(arity)

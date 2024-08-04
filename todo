@@ -1,0 +1,258 @@
+
+
+std::shared_ptr<Expr> Interpreter::handleIncrementDecrement(Literal *literal,bool isPrefix, bool isIncrement)
+{
+  
+    auto type = literal->getType();
+
+    if (type == LiteralType::INT)
+    {
+        long value = literal->getInt();
+        long newValue = isIncrement ? value + 1 : value - 1;
+        literal->setInt(newValue);
+        return Factory::Instance().createIntegerLiteral(isPrefix ? newValue : value);
+    }
+
+
+    return Factory::Instance().createBoolLiteral(false);
+    
+}
+
+void Lexer::scanToken()
+{
+    char c = advance();
+    switch (c)
+    {
+      case '(': 
+      {
+        parens.push(parens.size());
+        addToken(TokenType::LEFT_PAREN); 
+        break;
+      }
+      case ')': 
+      {
+        if (parens.size() > 0) parens.pop();
+        addToken(TokenType::RIGHT_PAREN); 
+        break;
+      }
+      case '{': 
+      {
+        braces.push(braces.size());
+        addToken(TokenType::LEFT_BRACE); 
+        break;
+      }
+      case '}': 
+      {
+        if (braces.size() > 0) braces.pop();
+        addToken(TokenType::RIGHT_BRACE); 
+        break;
+      }
+      case '[': 
+      {
+        brackets.push(brackets.size());
+        addToken(TokenType::LEFT_BRACKET); 
+        break;
+      }
+      case ']': 
+      {
+        if (brackets.size() > 0) brackets.pop();
+        addToken(TokenType::RIGHT_BRACKET); 
+        break;
+      }
+
+      case ',': addToken(TokenType::COMMA); break;
+      case '.': addToken(TokenType::DOT); break;
+      case '-': 
+      {
+        if (match('-')) 
+          addToken(TokenType::DEC);
+        else if (match('='))
+          addToken(TokenType::MINUS_EQUAL);  
+        else 
+          addToken(TokenType::MINUS);
+        break;
+      }
+      case '+': 
+      {
+        if (match('+')) 
+          addToken(TokenType::INC);
+        else if (match('='))
+          addToken(TokenType::PLUS_EQUAL);  
+        else 
+          addToken(TokenType::PLUS);
+        
+        break;
+      }
+      case ';': addToken(TokenType::SEMICOLON); break;
+      case ':': addToken(TokenType::COLON); break;
+
+      case '^': addToken(TokenType::POWER); break;
+
+      case '%': addToken(TokenType::MOD); break;
+
+      case '*': 
+      {
+        if (match('='))
+          addToken(TokenType::STAR_EQUAL);  
+        else 
+          addToken(TokenType::STAR);
+        break;
+      }
+  
+
+      case '!':
+        addToken(match('=') ? TokenType::BANG_EQUAL : TokenType::BANG);
+        break;
+      case '=':
+        addToken(match('=') ? TokenType::EQUAL_EQUAL : TokenType::EQUAL);
+        break;
+      case '<':
+        addToken(match('=') ? TokenType::LESS_EQUAL : TokenType::LESS);
+        break;
+      case '>':
+        addToken(match('=') ? TokenType::GREATER_EQUAL : TokenType::GREATER);
+        break;
+
+
+      case '/':
+        if (match('='))
+        {
+          addToken(TokenType::SLASH_EQUAL);
+        } else 
+        if (match('/')) 
+        {
+          while (peek() != '\n' && !isAtEnd()) advance();
+        } else
+        if (match('*')) 
+        {
+            advance();
+            while (!isAtEnd()) 
+            {
+                if (peek() == '*') break;
+                if (peek() == '\n') line++;
+                advance();
+            }
+            if (peek() == '*' && peekNext() == '/')
+            {
+                advance();
+                advance();
+                break;
+            } else 
+            {
+                Error("Unterminated comment");
+                return;
+            }
+        
+        } 
+        else 
+        {
+          addToken(TokenType::SLASH);
+        }
+        break;
+
+
+      case ' ':
+      case '\r':
+      case '\t':
+        // Ignore whitespace.
+        break;
+
+      case '\n':
+        line++;
+        break;
+      case '"': string(); break;
+
+      default:
+        if (isDigit(c)) 
+        {
+          number();
+        } else if (isAlpha(c)) 
+        {
+          identifier();
+        } else 
+        {
+          Error("Unexpected character" );
+        }
+
+        break;
+
+    }
+
+}
+
+
+std::shared_ptr<Expr> Parser::assignment()
+{
+    std::shared_ptr<Expr> expr = logic_or();
+
+    // std::cout<<"Assign: "<< expr->toString()<<" type: "<<peek().toString() << std::endl;
+    Token name = previous();
+    if (match(TokenType::EQUAL))
+    {
+         std::shared_ptr<Expr> value = assignment();
+         if (expr->getType() == ExprType::VARIABLE)
+         {
+            return  std::make_shared<AssignExpr>(name, value);
+         }
+
+    } else 
+    if (match(TokenType::PLUS_EQUAL))
+    {
+         std::shared_ptr<Expr> value = assignment();
+         if (expr->getType() == ExprType::VARIABLE)
+         {
+            Token token = Token(TokenType::PLUS_EQUAL, name.lexeme,name.literal, name.line);
+            std::shared_ptr<Expr> addition = std::make_shared<BinaryExpr>(expr, value, token);
+            return std::make_shared<AssignExpr>(name, addition);
+         }
+
+    } else if (match(TokenType::MINUS_EQUAL))
+    {
+         std::shared_ptr<Expr> value = assignment();
+         if (expr->getType() == ExprType::VARIABLE)
+         {
+            Token token = Token(TokenType::MINUS_EQUAL, name.lexeme,name.literal, name.line);
+            std::shared_ptr<Expr> addition = std::make_shared<BinaryExpr>(expr, value, token);
+            return std::make_shared<AssignExpr>(name, addition);
+            
+         }
+
+    } else if (match(TokenType::STAR_EQUAL))
+    {
+         std::shared_ptr<Expr> value = assignment();
+         if (expr->getType() == ExprType::VARIABLE)
+         {
+            Token token = Token(TokenType::STAR_EQUAL, name.lexeme,name.literal, name.line);
+            std::shared_ptr<Expr> addition = std::make_shared<BinaryExpr>(expr, value, token);
+            return std::make_shared<AssignExpr>(name, addition);
+           
+         }
+
+    } else if (match(TokenType::SLASH_EQUAL))
+    {
+         std::shared_ptr<Expr> value = assignment();
+         if (expr->getType() == ExprType::VARIABLE)
+         {
+
+            Token token = Token(TokenType::SLASH_EQUAL, name.lexeme,name.literal, name.line);
+            std::shared_ptr<Expr> addition = std::make_shared<BinaryExpr>(expr, value, token);
+            return std::make_shared<AssignExpr>(name, addition); 
+           
+         }
+
+    }
+    return expr;
+}
+
+
+std::shared_ptr<Expr> Parser::unary()
+{
+    if (match({TokenType::BANG, TokenType::MINUS, TokenType::NOT, TokenType::INC, TokenType::DEC}))
+    {
+        Token op = previous();
+        std::shared_ptr<Expr> right = unary();
+        bool isPrefix = (op.type == TokenType::INC || op.type == TokenType::DEC);
+        return std::make_shared<UnaryExpr>(right, op, isPrefix);
+    }
+    return call();
+}

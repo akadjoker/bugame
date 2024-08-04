@@ -26,8 +26,7 @@ process bunny()
         {
             speedX = speedX + -1;
             x = maxX;
-        } else
-        if(x<minX)
+        } elif(x<minX)
         {
             speedX = speedX * -1;
             x = minX;
@@ -41,8 +40,7 @@ process bunny()
             {
                 speedY = speedY -3  * rand()*4;
             }
-        }else
-        if(y<minY)
+        }elif(y<minY)
         {
             speedY=0;
             y=minY;

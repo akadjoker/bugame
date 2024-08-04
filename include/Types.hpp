@@ -38,6 +38,7 @@ struct StringObject : public Traceable
     StringObject(const char *str);
     StringObject(double value);
     StringObject(int value);
+    ~StringObject();
 };
 
 struct NativeFunctionObject : public Traceable
@@ -51,7 +52,7 @@ struct NativeFunctionObject : public Traceable
 
 struct Value
 {
-    u8 flags;
+
     ValueType type;
     union
     {
@@ -63,17 +64,17 @@ struct Value
 };
 
 #define INTEGER(value) \
-    (Value{0, ValueType::VNUMBER, {.number = static_cast<double>(value)}})
+    (Value{ ValueType::VNUMBER, {.number = static_cast<double>(value)}})
 #define NUMBER(value) \
-    (Value{0, ValueType::VNUMBER, {.number = (value)}})
+    (Value{ ValueType::VNUMBER, {.number = value}})
 #define STRING(value) \
-    (Value{0, ValueType::VSTRING, {.string = new StringObject(value)}})
+    (Value{ ValueType::VSTRING, {.string = new StringObject(value)}})
 #define BOOLEAN(value) \
-    (Value{0, ValueType::VBOOLEAN, {.boolean = (value)}})
+    (Value{ ValueType::VBOOLEAN, {.boolean = value}})
 #define NONE() \
-    (Value{0, ValueType::VNONE, {.number = 0}})
+    (Value{ ValueType::VNONE, {.number = 0}})
 #define NATIVE(fn, name, arity) \
-    (Value{0, ValueType::VNATIVE, {.native = new NativeFunctionObject(fn, name, arity)}})
+    (Value{ ValueType::VNATIVE, {.native = new NativeFunctionObject(fn, name, arity)}})
 
 #define AS_INTEGER(value) (static_cast<int>((value).number))
 #define AS_NUMBER(value) ((double)(value).number)
@@ -88,7 +89,6 @@ struct Value
 #define IS_NONE(value) ((value).type == ValueType::VNONE)
 #define IS_NATIVE_DEF(value) ((value).type == ValueType::VNATIVE)
 
-// isFalsey
 
 #define IS_OBJECT(value) ((value).type == ValueType::VSTRING)
 #define MARK(value)                  \
