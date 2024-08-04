@@ -122,16 +122,7 @@ void Arena::remove(Traceable *n)
             n->next->prev = n->prev;
         }
     }
-    // if (headRemove == nullptr)
-    // {
-    //     headRemove = n;
-    // }
-    // else
-    // {
-    //     headRemove->next = n;
-    // }
-    // headRemove = n;
-    // objects.push_back(n);
+
     delete n;
 }
 
