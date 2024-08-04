@@ -41,14 +41,7 @@ struct StringObject : public Traceable
     ~StringObject();
 };
 
-struct NativeFunctionObject : public Traceable
-{
-    NativeFunction func;
-    String name;
-    int arity;
-    NativeFunctionObject(NativeFunction func, const char *name, int arity);
-    int call(VirtualMachine *vm, int argc, Value *args);
-};
+
 
 struct Value
 {
@@ -59,7 +52,6 @@ struct Value
         double number;
         StringObject *string;
         bool boolean;
-        NativeFunctionObject *native;
     };
 };
 
@@ -73,21 +65,20 @@ struct Value
     (Value{ ValueType::VBOOLEAN, {.boolean = value}})
 #define NONE() \
     (Value{ ValueType::VNONE, {.number = 0}})
-#define NATIVE(fn, name, arity) \
-    (Value{ ValueType::VNATIVE, {.native = new NativeFunctionObject(fn, name, arity)}})
+
 
 #define AS_INTEGER(value) (static_cast<int>((value).number))
 #define AS_NUMBER(value) ((double)(value).number)
 #define AS_BOOLEAN(value) ((bool)(value).boolean)
 #define AS_STRING(value) ((StringObject *)(value).string)
 #define AS_RAW_STRING(value) (AS_STRING(value)->string.c_str())
-#define AS_NATIVE(value) ((NativeFunctionObject *)(value).native)
+
 
 #define IS_BOOLEAN(value) ((value).type == ValueType::VBOOLEAN)
 #define IS_NUMBER(value) ((value).type == ValueType::VNUMBER)
 #define IS_STRING(value) ((value).type == ValueType::VSTRING)
 #define IS_NONE(value) ((value).type == ValueType::VNONE)
-#define IS_NATIVE_DEF(value) ((value).type == ValueType::VNATIVE)
+
 
 
 #define IS_OBJECT(value) ((value).type == ValueType::VSTRING)

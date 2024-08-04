@@ -22,9 +22,6 @@ void debugValue(const Value &v)
     case ValueType::VNONE:
         printf("nil");
         break;
-    case ValueType::VNATIVE:
-        printf("<native %s>", v.native->name.c_str());
-        break;
 
     default:
         printf("Unknow value ");
@@ -46,9 +43,6 @@ void printValueln(const Value &v)
         break;
     case ValueType::VNONE:
         printf("nil\n");
-        break;
-    case ValueType::VNATIVE:
-        printf("<native %s>\n", v.native->name.c_str());
         break;
 
     default:
@@ -73,9 +67,7 @@ void printValue(const Value &v)
     case ValueType::VNONE:
         PRINT("nil");
         break;
-    case ValueType::VNATIVE:
-        PRINT("<native %s>", v.native->name.c_str());
-        break;
+
 
     default:
         PRINT("Unknow value ");
@@ -103,6 +95,16 @@ void Task::exitScope(int line)
     }
     
     
+}
+void *Task::operator new(size_t size)
+{
+    INFO("Allocate %d bytes", size);
+    return Arena::as().allocate(size);
+}
+
+void Task::operator delete(void *ptr, size_t size)
+{
+    Arena::as().deallocate(ptr, size);
 }
 
 int Task::addLocal(const char *name, u32 len,bool isArg)
@@ -236,16 +238,16 @@ void Task::pop(u32 count)
     }
 }
 
-Task::Task(VirtualMachine *vm, const char *name) : Traceable()
+Task::Task(VirtualMachine *vm, const char *name) 
 {
     m_done = false;
     is_main = false;
     PanicMode = false;
 
-
+ 
     this->vm = vm;
     ID = nextID++;
-    type = ObjectType::OTASK;
+    type = TaskType::TMAIN;
     parent = nullptr;
     argsCount = 0;
     isReturned = false;
@@ -680,15 +682,13 @@ void Task::Done()
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
+static const size_t instructionsPerFrame = 25;
 
-static const size_t instructionsPerFrame = 30;
 u8 Task::Run()
 {
     
-    if (PanicMode)
-        return ABORTED;
-    if (isReturned)
-        return FINISHED;
+    if (PanicMode)        return ABORTED;
+    if (isReturned)        return FINISHED;
 
  Frame* frame = &frames[frameCount - 1];        
 
@@ -697,599 +697,594 @@ u8 Task::Run()
     (frame->ip += 2,        \
      (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 #define READ_CONSTANT() (frame->task->constants[READ_BYTE()])
-    
- size_t instructionsExecuted = 0;
+
+    u32 instructionsExecuted=0;
 
 
-     while(instructionsExecuted < instructionsPerFrame)
-    {
+     while (instructionsExecuted < instructionsPerFrame)
+     {
+
+         u8 instruction = READ_BYTE();
+         int line = frame->task->chunk->lines[instruction];
+
+         switch ((OpCode)instruction)
+         {
+         case OpCode::CONST:
+         {
+
+             Value value = READ_CONSTANT();
+             push(value);
+
+             break;
+         }
+         case OpCode::PUSH:
+         {
+
+             Value value = READ_CONSTANT();
+             push(std::move(value));
+             break;
+         }
+         case OpCode::POP:
+         {
+             pop();
+             break;
+         }
+         case OpCode::TRUE:
+         {
+             push(std::move(BOOLEAN(true)));
+             break;
+         }
+         case OpCode::FALSE:
+         {
+             push(std::move(BOOLEAN(false)));
+             break;
+         }
+
+         case OpCode::HALT:
+         {
+             vm->Warning("Halt!");
+             isReturned = true;
+             return ABORTED;
+         }
+         case OpCode::PROGRAM:
+         {
+             Value constant = READ_CONSTANT();
+             if (!IS_STRING(constant))
+             {
+                 vm->Error("Program  name must be string [line %d]", line);
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::PRINT:
+         {
+             Value value = pop();
+             // printValue(std::move(value));
+             debugValue(std::move(value));
+             printf("\n");
+             break;
+         }
+         case OpCode::NOW:
+         {
+             push(std::move(NUMBER(time_now())));
+             break;
+         }
+         case OpCode::ADD:
+         {
+             u8 result = op_add();
+             if (result != OK)
+                 return result;
+             break;
+         }
+         case OpCode::SUBTRACT:
+         {
+             Value b = pop();
+             Value a = pop();
+             if (IS_NUMBER(a) && IS_NUMBER(b))
+             {
+                 Value result = NUMBER(AS_NUMBER(a) - AS_NUMBER(b));
+                 push(std::move(result));
+             }
+             else
+             {
+                 vm->Error("invalid  'subtract' operands [line %d]", line);
+
+                 return ABORTED;
+             }
+
+             break;
+         }
+         case OpCode::MULTIPLY:
+         {
+             Value b = pop();
+             Value a = pop();
+             if (IS_NUMBER(a) && IS_NUMBER(b))
+             {
+                 Value result = NUMBER(AS_NUMBER(a) * AS_NUMBER(b));
+                 push(std::move(result));
+             }
+             else
+             {
+                 vm->Error("invalid 'multiply' operands [line %d]", line);
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::DIVIDE:
+         {
+             Value b = pop();
+             Value a = pop();
+             if (IS_NUMBER(a) && IS_NUMBER(b))
+             {
+                 if (AS_NUMBER(b) == 0)
+                 {
+                     vm->Error("division by zero [line %d]", line);
+
+                     return ABORTED;
+                 }
+                 Value result = NUMBER(AS_NUMBER(a) / AS_NUMBER(b));
+                 push(std::move(result));
+             }
+             else
+             {
+                 vm->Error("invalid 'divide' operands [line %d]", line);
+
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::MOD:
+         {
+             u8 result = op_mod(line);
+             if (result != OK)
+                 return result;
+             break;
+         }
+         case OpCode::POWER:
+         {
+             Value b = pop();
+             Value a = pop();
+             if (IS_NUMBER(a) && IS_NUMBER(b))
+             {
+                 Value result = NUMBER(pow(AS_NUMBER(a), AS_NUMBER(b)));
+                 push(std::move(result));
+             }
+             else
+             {
+                 vm->Error("invalid 'power' operands [line %d]", line);
+
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::NEGATE:
+         {
+             Value value = pop();
+             if (IS_NUMBER(value))
+             {
+                 Value result = NUMBER(-AS_NUMBER(value));
+                 push(std::move(result));
+             }
+             else
+             {
+                 vm->Error("invalid 'negate' operands, Operand must be a number.");
+
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::NOT:
+         {
+             push(std::move(BOOLEAN(isFalsey(pop()))));
+             break;
+         }
+         case OpCode::EQUAL:
+         {
+             Value b = pop();
+             Value a = pop();
+             bool result = MatchValue(a, b);
+             push(std::move(BOOLEAN(result)));
+
+             break;
+         }
+         case OpCode::EVAL_EQUAL:
+         {
+             Value b = peek(0);
+             Value a = peek(1);
+             bool result = MatchValue(a, b);
+             push(std::move(BOOLEAN(result)));
+             break;
+         }
+         case OpCode::NOT_EQUAL:
+         {
+             u8 result = op_not_equal();
+             if (result != OK)
+                 return result;
+             break;
+         }
+         case OpCode::LESS:
+         {
+             u8 result = op_less();
+             if (result != OK)
+                 return result;
+
+             break;
+         }
+         case OpCode::LESS_EQUAL:
+         {
+             u8 result = op_less_equal();
+             if (result != OK)
+                 return result;
+
+             break;
+         }
+         case OpCode::GREATER:
+         {
+             u8 result = op_greater();
+             if (result != OK)
+                 return result;
+             break;
+         }
+         case OpCode::GREATER_EQUAL:
+         {
+             u8 result = op_greater_equal();
+             if (result != OK)
+                 return result;
+             break;
+         }
+
+         case OpCode::XOR:
+         {
+             u8 result = op_xor();
+             if (result != OK)
+                 return result;
+             break;
+         }
+
+         case OpCode::GLOBAL_DEFINE:
+         {
+
+             Value constant = READ_CONSTANT();
+             if (!IS_STRING(constant))
+             {
+                 vm->Error("Variable  name must be string [line %d]", line);
+
+                 return ABORTED;
+             }
+             const char *name = AS_RAW_STRING(constant);
+             Value value = peek();
+
+             if (!vm->global->define(name, value))
+             {
+                 vm->Error("Already a global variable with '%s' name.", name);
+                 return ABORTED;
+             }
+             pop();
+             //  printValue(value);
+
+             break;
+         }
+
+         case OpCode::GLOBAL_ASSIGN:
+         {
+             Value constant = READ_CONSTANT();
+             if (!IS_STRING(constant))
+             {
+                 vm->Error("Variable  name must be string [line %d]", line);
+
+                 return ABORTED;
+             }
+             const char *name = AS_RAW_STRING(constant);
+             Value value = peek();
+
+             if (!vm->global->assign(name, value))
+             {
+                 vm->Warning("Undefined global variable '%s' [line %d]", name, line);
+             }
+
+             break;
+         }
+         case OpCode::GLOBAL_GET:
+         {
+             Value constant = READ_CONSTANT();
+             if (!IS_STRING(constant))
+             {
+                 vm->Error("Variable  names must be string [line %d]", line);
+
+                 return ABORTED;
+             }
+             const char *name = AS_RAW_STRING(constant);
+             Value value;
+
+             if (vm->global->get(name, value))
+             {
+                 push(value);
+             }
+             else
+             {
+                 vm->Error("Undefined global variable '%s' [line %d]", name, line);
+
+                 return ABORTED;
+             }
+
+             break;
+         }
+         case OpCode::LOCAL_SET:
+         {
+             u8 slot = READ_BYTE();
+
+             if (type == TaskType::TPROCESS)
+             {
+                 if (slot == IID)
+                 {
+                     vm->Error("Variable  ID is read-only");
+                     return ABORTED;
+                 }
+             }
+
+             frame->slots[slot] = peek(0);
+
+             //  printf("local get variable %d", slot);
+             //  printValue(frame->slots[slot]);
+
+             break;
+         }
+         case OpCode::LOCAL_GET:
+         {
+             u8 slot = READ_BYTE();
+
+             // printValue(frame->slots[slot]);
+             // INFO("local get variable %d %s", slot,frame->task->name.c_str());
+             push(frame->slots[slot]);
+
+             break;
+         }
+
+         case OpCode::JUMP_IF_FALSE:
+         {
+             u16 offset = READ_SHORT();
+             Value value = peek(0);
+             if (isFalsey(value))
+             {
+                 frame->ip += offset;
+                 //   printf("offset: %d\n", offset);
+             }
+             break;
+         }
+         case OpCode::JUMP_IF_TRUE:
+         {
+             u16 offset = READ_SHORT();
+             frame->ip += offset;
+             break;
+         }
+         case OpCode::JUMP:
+         {
+             u16 offset = READ_SHORT();
+             frame->ip += offset;
+             //  printf("jump offset: %d\n", offset);
+             break;
+         }
+         case OpCode::DUP:
+         {
+             Value value = peek(0);
+             push(value);
+             break;
+         }
+         case OpCode::JUMP_BACK:
+         {
+             uint16_t offset = READ_SHORT();
+             frame->ip -= offset;
+             break;
+         }
+
+         case OpCode::CALL:
+         {
+             uint8_t argCount = READ_BYTE();
+             Value func = peek(argCount);
+             if (!IS_STRING(func))
+             {
+                 vm->Error("Native Function name must be string [line %d]", line);
+                 printValue(func);
+                 return ABORTED;
+             }
+             Value result;
+             int popResult = -1;
+             vm->currentTask = this;
+             int count = vm->callNativeFunction(AS_RAW_STRING(func), (stackTop - argCount), argCount);
+             if (count == -1)
+             {
+                 return ABORTED;
+             }
+             if (count > 0)
+             {
+                 popResult = count;
+                 result = peek();
+             }
+             stackTop -= (argCount + 1) + popResult;
+             if (count > 0)
+                 push(std::move(result));
+             break;
+         }
+         case OpCode::CALL_SCRIPT:
+         {
+
+             int argCount = (int)READ_BYTE();
+             Value func = peek(argCount);
+             if (!IS_STRING(func))
+             {
+                 vm->Error("Function name must be string [line %d]", line);
+                 printValue(func);
+                 return ABORTED;
+             }
+             FunctionObject *callTask = nullptr;
+             if (!vm->getFunction(AS_RAW_STRING(func), &callTask))
+             {
+                 vm->Error("Function '%s' not defined [line %d]", AS_RAW_STRING(func), line);
+                 return ABORTED;
+             }
+             if (callTask->argsCount != argCount)
+             {
+                 vm->Error("Function %s, Expected %d arguments but got %d [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
+                 return ABORTED;
+             }
+
+             frame = &frames[frameCount++];
+             frame->task = callTask;
+             frame->ip = callTask->chunk->code;
+             frame->slots = stackTop - argCount - 1;
+
+             callTask->disassembleCode(callTask->name.c_str());
+
+             if (frameCount == MAX_FRAMES)
+             {
+                 vm->Error("Frames  overflow .");
+                 return ABORTED;
+             }
+             break;
+         }
+         case OpCode::RETURN:
+         {
+
+             // PrintStack();
+             Value result = pop();
+             frameCount--;
+             if (frameCount == 0)
+             {
+                 // frame->task->exitScope(line);
+                 INFO("main %s", frame->task->name.c_str());
+                 PrintStack();
+                 pop();
+                 return TERMINATED;
+             }
+             //  INFO("return %s", frame->task->name.c_str());
+             frame->task->exitScope(line);
+             stackTop = frame->slots;
+             push(result);
+             frame = &frames[frameCount - 1];
+
+             break;
+         }
+         case OpCode::CALL_PROCESS:
+         {
+
+             u8 argCount = READ_BYTE();
+             Value func = peek(argCount);
+             if (!IS_STRING(func))
+             {
+                 vm->Warning("Process name must be a string");
+                 printValue(func);
+
+                 return ABORTED;
+             }
+             const char *name = AS_RAW_STRING(func);
+             Task *callTask = vm->getTask(AS_RAW_STRING(func));
+             if (!callTask)
+             {
+                 pop(argCount);
+                 vm->Error("Process '%s' not defined [line %d]", AS_RAW_STRING(func), line);
+
+                 return ABORTED;
+             }
+             if (callTask->argsCount != argCount)
+             {
+                 vm->Error("Process %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
+
+                 return ABORTED;
+             }
+
+             // INFO("Process CALL %s args %d chunk %d", name ,callTask->argsCount,callTask->chunk->count);
+             Process *process = vm->AddProcess(name);
+             process->chunk = new Chunk(callTask->chunk);
+             process->init_frames();  // prepare frames 4 functions
+             process->set_defaults(); // local variables x,y, ... etc
+             process->constants = callTask->constants;
+
+             for (int i = argCount - 1; i >= 0; i--)
+             {
+                 Value arg = peek(i);
+                 process->push(arg);
+             }
+             pop(argCount+1);
+
+         
+
+             frame->slots = stackTop - argCount - 1;
+             // callTask->disassembleCode(name);
+             // process->disassembleCode(name);
+             if (this->type == TaskType::TPROCESS)
+             {
+                 process->set_parent(static_cast<Process *>(this));
+             }
+
+             vm->run_process.push_back(process);
+             push(INTEGER((int)process->ID));
+
+             // PrintStack();
+             break;
+         }
+         case OpCode::RETURN_PROCESS:
+         {
+
+             // disassembleCode(name.c_str());
+             // INFO("Process RETURN %s ", name.c_str());
+             // pop((constants.size() - 1) + DEFAULT_COUNT);
+             int count = (stackTop - frame->slots);
+             for (int i = 0; i < count; i++)
+             {
+                 pop();
+             }
+
+             // PrintStack();
+
+             return TERMINATED;
+         }
+
+         case OpCode::FRAME:
+         {
+             INFO("FRAME %s", name.c_str());
+
+             break;
+         }
+         case OpCode::CLONE:
+         {
+             INFO("CLONE %s", name.c_str());
+             break;
+         }
+
+         case OpCode::NIL:
+         {
+             push(VirtualMachine::DEFAULT);
+             break;
+         }
+
+         default:
+         {
+             vm->Error(" %s running %d with unknown '%d' opcode frame %d", name.c_str(), frame->ip, (int)instruction, frameCount);
+
+             return ABORTED;
+         }
+         }
+
+         if (type == TaskType::TPROCESS)
+         {
+         }
+
+           //  INFO("RUN %s executed %d", name.c_str(),instructionsExecuted);
+
+         instructionsExecuted++;
+         if (instructionsExecuted >= instructionsPerFrame)
+         {
+             return RUNNING;            
+         }
+
+     }
 
 
-        u8 instruction = READ_BYTE();
-        int line = frame->task->chunk->lines[instruction];
- 
+ //  return RUNNING;
+     return FINISHED;
 
-        switch ((OpCode)instruction)
-        {
-        case OpCode::CONST:
-        {
-
-            Value value = READ_CONSTANT();
-            push(value);
-
-            
-
-            break;
-        }
-        case OpCode::PUSH:
-        {
-
-            Value value = READ_CONSTANT();
-            push(std::move(value));
-            break;
-        }
-        case OpCode::POP:
-        {
-            pop();
-            break;
-        }
-        case OpCode::TRUE:
-        {
-            push(std::move(BOOLEAN(true)));
-            break;
-        }
-        case OpCode::FALSE:
-        {
-            push(std::move(BOOLEAN(false)));
-            break;
-        }
-
-        case OpCode::HALT:
-        {
-            vm->Warning("Halt!");
-            isReturned = true;
-            return ABORTED;
-        }
-        case OpCode::PROGRAM:
-        {
-            Value constant = READ_CONSTANT();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Program  name must be string [line %d]", line);
-                return ABORTED;
-            }
-            //const char *name = AS_RAW_STRING(constant);
-            break;
-        }
-        case OpCode::PRINT:
-        {
-            Value value = pop();
-            // printValue(std::move(value));
-            debugValue(std::move(value));
-            printf("\n");
-            break;
-        }
-        case OpCode::NOW:
-        {
-            push(std::move(NUMBER(time_now())));
-            break;
-        }
-        case OpCode::ADD:
-        {
-            u8 result = op_add();
-            if (result!=OK)
-                return result;
-            break;
-        }
-        case OpCode::SUBTRACT:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(AS_NUMBER(a) - AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid  'subtract' operands [line %d]", line);
-
-                return ABORTED;
-            }
-
-            break;
-        }
-        case OpCode::MULTIPLY:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(AS_NUMBER(a) * AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'multiply' operands [line %d]", line);
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::DIVIDE:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                if (AS_NUMBER(b) == 0)
-                {
-                    vm->Error("division by zero [line %d]", line);
-
-                    return ABORTED;
-                }
-                Value result = NUMBER(AS_NUMBER(a) / AS_NUMBER(b));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'divide' operands [line %d]", line);
-
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::MOD:
-        {
-            u8 result = op_mod(line);
-            if (result!=OK)
-                return result;
-            break;
-        }
-        case OpCode::POWER:
-        {
-            Value b = pop();
-            Value a = pop();
-            if (IS_NUMBER(a) && IS_NUMBER(b))
-            {
-                Value result = NUMBER(pow(AS_NUMBER(a), AS_NUMBER(b)));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'power' operands [line %d]", line);
-
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::NEGATE:
-        {
-            Value value = pop();
-            if (IS_NUMBER(value))
-            {
-                Value result = NUMBER(-AS_NUMBER(value));
-                push(std::move(result));
-            }
-            else
-            {
-                vm->Error("invalid 'negate' operands, Operand must be a number.");
-
-                return ABORTED;
-            }
-            break;
-        }
-        case OpCode::NOT:
-        {
-            push(std::move(BOOLEAN(isFalsey(pop()))));
-            break;
-        }
-        case OpCode::EQUAL:
-        {
-            Value b = pop();
-            Value a = pop();
-            bool result = MatchValue(a, b);
-            push(std::move(BOOLEAN(result)));
-
-            break;
-        }
-        case OpCode::EVAL_EQUAL:
-        {
-            Value b = peek(0);
-            Value a = peek(1);
-            bool result = MatchValue(a, b);
-            push(std::move(BOOLEAN(result)));
-            break;
-        }
-        case OpCode::NOT_EQUAL:
-        {
-            u8 result = op_not_equal();
-            if (result!=OK)
-                return result;
-            break;
-        }
-        case OpCode::LESS:
-        {
-            u8 result = op_less();
-            if (result!=OK)
-                return result;
-
-            break;
-        }
-        case OpCode::LESS_EQUAL:
-        {
-           u8 result = op_less_equal();
-            if (result!=OK)
-                return result;
-
-            break;
-        }
-        case OpCode::GREATER:
-        {
-            u8 result = op_greater();   
-            if (result!=OK)
-                return result; 
-            break;
-        }
-        case OpCode::GREATER_EQUAL:
-        {
-            u8 result = op_greater_equal();
-            if (result!=OK)
-                return result;
-            break;
-        }
-
-        case OpCode::XOR:
-        {
-           u8 result = op_xor();
-            if (result!=OK)
-                return result;
-            break;
-        }
-
-        case OpCode::GLOBAL_DEFINE:
-        {
-
-            Value constant = READ_CONSTANT();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  name must be string [line %d]", line);
-
-                return ABORTED;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value = peek();
-
-            if (!vm->global->define(name, value))
-            {
-                vm->Error("Already a global variable with '%s' name.", name);
-                return ABORTED;
-            }
-            pop();
-            //  printValue(value);
-
-            break;
-        }
-
-        case OpCode::GLOBAL_ASSIGN:
-        {
-            Value constant = READ_CONSTANT();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  name must be string [line %d]", line);
-
-                return ABORTED;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value = peek();
-
-            if (!vm->global->assign(name, value))
-            {
-                vm->Warning("Undefined global variable '%s' [line %d]", name, line);
-            }
-
-            break;
-        }
-        case OpCode::GLOBAL_GET:
-        {
-            Value constant = READ_CONSTANT();
-            if (!IS_STRING(constant))
-            {
-                vm->Error("Variable  names must be string [line %d]", line);
-
-                return ABORTED;
-            }
-            const char *name = AS_RAW_STRING(constant);
-            Value value;
-
-            if (vm->global->get(name, value))
-            {
-                push(value);
-            }
-            else
-            {
-                vm->Error("Undefined global variable '%s' [line %d]", name, line);
-
-                return ABORTED;
-            }
-
-            break;
-        }
-        case OpCode::LOCAL_SET:
-        {
-            u8 slot = READ_BYTE();
-
-            if (type==ObjectType::OPROCESS)
-            {
-                if (slot ==IID)
-                {
-                    vm->Error("Variable  ID is read-only");
-                    return ABORTED;
-                }
-            }
-
-            frame->slots[slot]= peek(0);
-            
-
-         //  printf("local get variable %d", slot);
-         //  printValue(frame->slots[slot]);
-
-        
-            break;
-        }
-        case OpCode::LOCAL_GET:
-        {
-            u8 slot = READ_BYTE();
-            
-          // printValue(frame->slots[slot]);
-           //INFO("local get variable %d %s", slot,frame->task->name.c_str());
-            push(frame->slots[slot]);
-
-            break;
-        }
-
-        case OpCode::JUMP_IF_FALSE:
-        {
-            u16 offset = READ_SHORT();
-            Value value = peek(0);
-            if (isFalsey(value))
-            {
-                frame->ip += offset;
-                //   printf("offset: %d\n", offset);
-            }
-            break;
-        }
-        case OpCode::JUMP_IF_TRUE:
-        {
-            u16 offset = READ_SHORT();
-            frame->ip += offset;
-            break;
-        }
-        case OpCode::JUMP:
-        {
-            u16 offset = READ_SHORT();
-            frame->ip += offset;
-            //  printf("jump offset: %d\n", offset);
-            break;
-        }
-        case OpCode::DUP:
-        {
-            Value value = peek(0);
-            push(value);
-            break;
-        }
-        case OpCode::JUMP_BACK:
-        {
-            uint16_t offset = READ_SHORT();
-            frame->ip -= offset;
-            break;
-        }
-
-  
-        case OpCode::CALL:
-        {
-            uint8_t argCount = READ_BYTE();
-            Value func = peek(argCount);
-            if (!IS_STRING(func))
-            {
-                vm->Error("Native Function name must be string [line %d]", line);
-                printValue(func);
-                return ABORTED;
-            }
-            Value result;
-            int popResult = -1;
-            vm->currentTask = this;
-            int count = vm->callNativeFunction(AS_RAW_STRING(func), (stackTop - argCount), argCount);
-            if (count==-1)
-            {
-                return ABORTED;
-            } 
-            if (count > 0)
-            { 
-                popResult = count;
-                result = peek();
-            }
-            stackTop -= (argCount + 1) + popResult;
-            if (count > 0)
-                push(std::move(result));
-            break;
-        }
-        case OpCode::CALL_SCRIPT:
-        {
-
-            int argCount = (int)READ_BYTE();
-            Value func = peek(argCount);
-            if (!IS_STRING(func))
-            {
-                vm->Error("Function name must be string [line %d]", line);
-                printValue(func);
-                return ABORTED;
-            }
-            FunctionObject *callTask = nullptr;
-            if (!vm->getFunction(AS_RAW_STRING(func), &callTask))
-            {
-                vm->Error("Function '%s' not defined [line %d]", AS_RAW_STRING(func), line);
-                return ABORTED;
-            }
-            if (callTask->argsCount != argCount)
-            {
-                vm->Error("Function %s, Expected %d arguments but got %d [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-                return ABORTED;
-            }
-
-            frame = &frames[frameCount++];
-            frame->task = callTask;
-            frame->ip = callTask->chunk->code;
-            frame->slots = stackTop - argCount -1;
-
-          
-
-            callTask->disassembleCode(callTask->name.c_str());
-            
-            if (frameCount == MAX_FRAMES)
-            {
-                    vm->Error("Frames  overflow .");
-                    return ABORTED;
-            }
-            break;
-        }
-        case OpCode::RETURN:
-        {
-
-           // PrintStack();
-            Value result = pop();
-            frameCount--;
-            if (frameCount == 0)
-            {
-               // frame->task->exitScope(line);
-                INFO("main %s", frame->task->name.c_str());
-                PrintStack();
-                pop();
-                return TERMINATED;
-            }
-          //  INFO("return %s", frame->task->name.c_str());
-            frame->task->exitScope(line);
-            stackTop = frame->slots;
-            push(result);
-            frame = &frames[frameCount - 1];
-            
-            break;
-        }
-        case OpCode::CALL_PROCESS:
-        {
-
-                u8 argCount = READ_BYTE();
-                Value func = peek(argCount);
-                if (!IS_STRING(func))
-                {
-                    vm->Warning("Process name must be a string");
-                    printValue(func);
-
-                    return ABORTED;
-                }
-                const char* name = AS_RAW_STRING(func);
-                Task *callTask = vm->getTask(AS_RAW_STRING(func));
-                if (!callTask)
-                {
-                    pop(argCount);
-                    vm->Error("Process '%s' not defined [line %d]", AS_RAW_STRING(func), line);
-
-                    return ABORTED;
-                }
-                if (callTask->argsCount != argCount)
-                {
-                    vm->Error("Process %s, Expected %ld arguments but got %ld [line %d]", AS_RAW_STRING(func), callTask->argsCount, argCount, line);
-
-                    return ABORTED;
-                }
-
-                //INFO("Process CALL %s args %d chunk %d", name ,callTask->argsCount,callTask->chunk->count);
-                Process *process = vm->AddProcess(name);
-                process->chunk= new Chunk(callTask->chunk);
-                process->init_frames();//prepare frames 4 functions
-                process->set_defaults();//local variables x,y, ... etc
-                process->constants = callTask->constants;
-
-                for (int i = argCount - 1; i >= 0; i--)
-                {
-                    Value arg = peek(i);
-                    process->push(arg);
-                }
-                pop(argCount);
-
-
-                    frame->slots = stackTop - argCount - 1;
-                   // callTask->disassembleCode(name);
-                   // process->disassembleCode(name);
-                  if (this->type == ObjectType::OPROCESS)
-                  {
-                      process->set_parent(static_cast<Process *>(this));
-                    }
-
-                vm->run_process.push_back(process);
-                
-               // PrintStack();
-                continue;
-        }
-        case OpCode::RETURN_PROCESS:
-        {
-           
-            
-          // disassembleCode(name.c_str());
-          // INFO("Process RETURN %s ", name.c_str());
-           // pop((constants.size() - 1) + DEFAULT_COUNT);
-            int count = (stackTop - frame->slots);
-            for (int i = 0; i < count; i++)
-            {
-                pop();
-            }
-            
-           // PrintStack();
-            
-        
-
-            return TERMINATED;
-        }
-
-        case OpCode::FRAME:
-        {
-            INFO("FRAME %s", name.c_str());
-
-            break;
-        }
-        case OpCode::CLONE:
-        {
-            INFO("CLONE %s", name.c_str());
-            break;
-        }
-
-        case OpCode::NIL:
-        {
-            push(VirtualMachine::DEFAULT);
-            break;
-        }
-
-        default:
-        {
-            vm->Error(" %s running %d with unknown '%d' opcode frame %d", name.c_str(), frame->ip, (int)instruction, frameCount);
-
-            return ABORTED;
-        }
-        }
-        instructionsExecuted++;
-
-       if (type == ObjectType::OPROCESS)
-       {
-            
-       }
-            
-
-        if (instructionsExecuted >= instructionsPerFrame)
-        {
-            return RUNNING;
-        }
-    }
 #undef READ_BYTE
 #undef READ_SHORT
 #undef READ_CONSTANT
-    return FINISHED;
+
 }

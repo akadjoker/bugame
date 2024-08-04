@@ -9,6 +9,7 @@
 #define CONSOLE_COLOR_CYAN "\033[0;36m"
 #define CONSOLE_COLOR_YELLOW "\033[1;33m"
 #define CONSOLE_COLOR_BLUE "\033[0;34m"
+static const double rand_scale = 1.0 / (1 << 16) / (1 << 16);
 
 //void Log(int severity, const char *fmt, ...);
 void Log(int severity, const char* fmt, ...);
@@ -31,6 +32,16 @@ static inline bool matchString(const char *str1, const char *str2,size_t bLen)
     
     return (memcmp(str1, str2, aLen) == 0);
     
+}
+
+
+static inline double Random()
+{
+  unsigned int lo = rand() & 0xfff;
+  unsigned int mid = rand() & 0xfff;
+  unsigned int hi = rand() & 0xff;
+  double result = (lo | (mid << 12) | (hi << 24)) * rand_scale;
+  return result;
 }
 
 static inline size_t  GROW_CAPACITY(size_t capacity)

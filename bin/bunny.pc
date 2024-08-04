@@ -1,24 +1,10 @@
 program teste;
 
-
-
 var maxX=screenWidth-40;
 var maxY=screenHeight-40;
 var minX=40;
 var minY=40;
 var gravity = 0.5;
-
-
-def fibonacci( n) 
-{
-    
-    if (n < 2) 
-    {
-         return n;
-    }
-
-   return fibonacci(n-2) + fibonacci(n-1); 
-}
 
 process bunny()
 {
@@ -27,16 +13,9 @@ process bunny()
     y = mouse_y();
     var speedX=rand()*8;
     var speedY=rand()*5 -2.5;
-    var life=100;
+    var life=0;
     loop 
     {
-
-    
-        life= life -1;
-        if (life<=0)
-        {
-            break;
-        }
         
         x = x + speedX;
         y = y + speedY;
@@ -77,35 +56,17 @@ process bunny()
 process game()
 {
     var i=0;
-    var down=true;
- 
     loop 
-    {   
-
-       
+    {
         
       if (mouse_down(0))
-      {
-        if (down)
-        {
-            down =false;
-            bunny();
-        }
-      } else
-       {
-        down=true;
-       }
-    if (mouse_down(1))
       {
             bunny();
       }
 
+         
     }
 }
 
- bunny();
 
-var id= game();
-print(id);
-
-print("exist");
+game();

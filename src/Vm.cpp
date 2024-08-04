@@ -86,7 +86,6 @@ FunctionObject *VirtualMachine::newFunction(const char *name)
 {
     FunctionObject *task = new FunctionObject(this, name);
     functionsMap.insert(name, task);
-    scriptFunctions.push_back(task);
     currentTask = task;
     return task;
 }
@@ -280,22 +279,29 @@ bool VirtualMachine::Update()
     if (panicMode || isHalt || run_process.size() == 0)
         return false;
 
-   // INFO("Process running %d", run_process.size());
+
+
+
     for (size_t i = 0; i < run_process.size(); i++)
     {
         Task *task = static_cast<Task *>(run_process[i]);
-       // INFO("run task %s", task->name.c_str());    
         u8 state = task->Run();
         if (state==ABORTED || state == TERMINATED || state == FINISHED)
         {
-          //  INFO("Task %s finished", task->name.c_str());
-            run_process.remove(task);
-            i--;
+          run_process.erase(i);
+          processDeletor.push_back(task);
+          i--;
         }
-        if (task->type == ObjectType::OPROCESS)
-            task->update();
+
+        task->update();
         
     }
+
+    for (size_t i = 0; i < processDeletor.size(); i++)
+    {
+        delete processDeletor[i];
+    }
+    processDeletor.clear();
 
     return run_process.size() == 0;
 }
@@ -310,15 +316,41 @@ VirtualMachine::~VirtualMachine()
 void VirtualMachine::Clear()
 {
 
-    scriptFunctions.clear();
+   // scriptFunctions.clear();
+    FunctionObject* func = functionsMap.first();
+    while (func)
+    {
+        delete func;
+        func = functionsMap.next();
+    }
+
     functionsMap.clear();
-
-
-
-    nativeFunctions.clear();
-    scriptFunctions.clear();
+    for (size_t i = 0; i < taskes.size(); i++)
+    {
+        delete taskes[i];
+    }
     taskes.clear();
     taskesMap.clear();
+
+    for (size_t i = 0; i < run_process.size(); i++)
+    {
+        delete run_process[i];
+    }
+    run_process.clear();
+
+    NativeFunctionObject* nativeOP = nativeFunctions.first();
+    while (nativeOP)
+    {
+        delete nativeOP;
+        nativeOP = nativeFunctions.next();
+    }
+    nativeFunctions.clear();
+    for (size_t i = 0; i < processDeletor.size(); i++)
+    {
+        delete processDeletor[i];
+    }
+    processDeletor.clear();
+
     run_process.clear();
     global->clear();
     mainTask = nullptr;
@@ -475,11 +507,23 @@ const String OpCodeNames[] =
         "SWITCH", "CASE", "SWITCH_DEFAULT", "DUP", "EVAL_EQUAL", "JUMP_BACK", "LOOP_BEGIN", "LOOP_END",
         "BREAK", "CONTINUE", "DROP", "CALL", "CALL_SCRIPT", "CALL_PROCESS", "RETURN_DEF", "RETURN_PROCESS",
         "RETURN_NATIVE", "NIL", "JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "COUNT"};
-u8 VirtualMachine::Run()
+bool VirtualMachine::Run()
 {
      mainTask->init_frames();
   //   mainTask->disassembleCode("main");
-     return mainTask->Run();
+    while(true)
+    {
+        u8 state =mainTask->Run();
+        if (state == FINISHED || state == TERMINATED)
+        {
+            return true;
+        } 
+        if (state == ABORTED)
+        {
+            return false;
+        }
+    }
+    return false;
 }
 
 //***************************************************************************************************************** */
@@ -490,3 +534,21 @@ FunctionObject::FunctionObject(VirtualMachine *vm, const char *name) : Task(vm, 
 {
     chunk = new Chunk(256);
 }
+
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+
+
+NativeFunctionObject::NativeFunctionObject(NativeFunction func, const char *name, int arity) : func(func), name(name), arity(arity)
+{
+}
+
+int NativeFunctionObject::call(VirtualMachine *vm, int argc, Value *args)
+{
+    return func(vm, argc, args);
+}
+
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */

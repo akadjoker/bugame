@@ -3,7 +3,7 @@
 #include "Token.hpp"
 #include "Lexer.hpp"
 #include "Parser.hpp"
-class VirtualMachine;
+
 
 
 enum OpCode
@@ -92,12 +92,16 @@ enum OpCode
 };
 
 class Task;
-
-
+class Process;
+class VirtualMachine;
 
 #define MAX_FRAMES 64
-#define STACK_MAX (MAX_FRAMES * UINT8_MAX)
+//#define STACK_MAX (MAX_FRAMES * UINT8_MAX)
+#define STACK_MAX (256)
 
+// 256                   = 42920 bytes
+// 512                   = 47016 bytes
+//MAX_FRAMES * UINT8_MAX = 299944 bytes
 
 static const int RUNNING = 0;
 static const int FINISHED = 1;
@@ -141,9 +145,14 @@ struct Frame
     Value *slots;
 };
 
+enum class TaskType
+{
+    TMAIN = 0,
+    TPROCESS,
+    TCLASS,
+};
 
-
-class Task : public Traceable
+class Task 
 {
 private:
     friend class VirtualMachine;
@@ -165,119 +174,112 @@ private:
 
     
 
-
-
-    Value* stackTop;
-
-    int scopeDepth;
-
-    bool mainTask;
-
-   
  
-    u8 argsCount;
 
+ Value *stackTop;
 
+ int scopeDepth;
 
-    void beginScope();
-    void exitScope(int line);
-    
+ bool mainTask;
 
+ u8 argsCount;
 
-   // u8 read_byte();
-   //u16 read_short();
+ void beginScope();
+ void exitScope(int line);
 
-    u8 makeConstant( Value value);
-    void writeByte(u8 byte, int line);
-    void writeBytes(u8 byte1, u8 byte2,int line);
-    void writeConstant( Value value,int line);
-    
-    void writeConstantVar(const char *name, Value value, int line);
+ // u8 read_byte();
+ // u16 read_short();
 
-    void disassembleCode(const char *name);
-    u32 disassembleInstruction(u32 offset);
-    u32 constantInstruction(const char *name, u32 offset);
-    u32 simpleInstruction(const char *name, u32 offset);
-    u32 byteInstruction(const char *name, u32 offset);
-    u32 jumpInstruction(const char *name, u32 sign, u32 offset);
-    u32 varInstruction(const char *name, u32 offset);
+ u8 makeConstant(Value value);
+ void writeByte(u8 byte, int line);
+ void writeBytes(u8 byte1, u8 byte2, int line);
+ void writeConstant(Value value, int line);
 
-    
+ void writeConstantVar(const char *name, Value value, int line);
 
-    
+ void disassembleCode(const char *name);
+ u32 disassembleInstruction(u32 offset);
+ u32 constantInstruction(const char *name, u32 offset);
+ u32 simpleInstruction(const char *name, u32 offset);
+ u32 byteInstruction(const char *name, u32 offset);
+ u32 jumpInstruction(const char *name, u32 sign, u32 offset);
+ u32 varInstruction(const char *name, u32 offset);
 
-    u8 op_add();
-    u8 op_mod(int line);
-    u8 op_not_equal();
-    u8 op_less();
-    u8 op_greater();
-    u8 op_less_equal();
-    u8 op_greater_equal();
-    u8 op_xor();
+ u8 op_add();
+ u8 op_mod(int line);
+ u8 op_not_equal();
+ u8 op_less();
+ u8 op_greater();
+ u8 op_less_equal();
+ u8 op_greater_equal();
+ u8 op_xor();
 
-   
+ protected:
+ String name;
+ u64 ID;
 
-protected:
-    String name;
-    u64 ID;
+ TaskType type;
 
-    int frameCount;
-    Local locals[UINT8_MAX];
-    int localCount;
-    Value stack[STACK_MAX];
-    bool m_done;
-    Task *parent;
-    VirtualMachine *vm;
-    bool is_main;
-    bool isReturned;
-    Chunk *chunk;
-    Vector<Value> constants;
-     Frame frames[MAX_FRAMES];
+ int frameCount;
+ Local locals[UINT8_MAX];
+ int localCount;
+ Value stack[STACK_MAX];
+ bool m_done;
+ Task *parent;
+ VirtualMachine *vm;
+ bool is_main;
+ bool isReturned;
+ Chunk *chunk;
+ Vector<Value> constants;
+ Frame frames[MAX_FRAMES];
 
-    int declareVariable(const String &string,bool isArg=false);
-    int addLocal(const char* name,u32 len,bool isArg=false);
-    int resolveLocal(const String &string);
-    bool setLocalVariable(const String &string, int index);
-    void set_process();
+ int declareVariable(const String &string, bool isArg = false);
+ int addLocal(const char *name, u32 len, bool isArg = false);
+ int resolveLocal(const String &string);
+ bool setLocalVariable(const String &string, int index);
+ void set_process();
 
-        bool push(Value v);
-    Value pop();
-    Value peek(int offset = 0);
-    Value top();
-    void pop(u32 count);
-    void PrintStack();
+ bool push(Value v);
+ Value pop();
+ Value peek(int offset = 0);
+ Value top();
+ void pop(u32 count);
+ void PrintStack();
 
-public:
-    Task(VirtualMachine *vm, const char *name);
-    virtual ~Task();
+ public:
+ Task(VirtualMachine *vm, const char *name);
+ virtual ~Task();
 
-    void init_frames();
+ void init_frames();
 
-   
-    u8 Run();
-    void write_byte(u8 byte, int line);
+ u8 Run();
+ void write_byte(u8 byte, int line);
 
-    
+ u8 addConst(Value v);
+ u8 addConstString(const char *str);
+ u8 addConstNumber(double number);
 
-    u8 addConst(Value v);
-    u8 addConstString(const char *str);
-    u8 addConstNumber(double number);
+ virtual void create() {};
+ virtual void remove() {};
+ virtual void update() {};
 
-    virtual void create(){};
-    virtual void remove(){};
-    virtual void update(){};
+ bool IsDone();
+ void Done();
+ bool IsMain() const { return is_main; }
 
-    bool IsDone();
-    void Done();
-    bool IsMain() const { return is_main; }
+ static void *operator new(size_t size);
+ static void operator delete(void *ptr, size_t size);
+
 
 };
 
 
-struct FunctionObject : public Task
+class FunctionObject : public Task
 {
-    int arity;
     
+   public: 
+    int arity;
+
     FunctionObject(VirtualMachine *vm, const char *name);
     
 };
@@ -311,8 +313,46 @@ struct Instance
     }
 };
 
+
+class ProcessList
+{
+private:
+    Process *head;
+    Process *tail;
+    u32     m_count;
+
+public:
+    ProcessList();
+    ~ProcessList();
+
+    Process *first() const { return head; }
+    Process *last() const { return tail; }
+
+
+    Process *by_priority(u32 priority);
+    Process *by_name(const char *name);
+
+    void clear(bool freeData);
+    
+    void add(Process *p);
+    
+    void insert(Process *p);
+    
+    Process *remove(Process *p);
+
+    u32 count() const { return m_count; }
+};
+
 class Process : public Task 
 {
+
+private:
+friend class VirtualMachine;
+friend class Task;
+friend class ProcessList;
+
+    Process *next;
+    Process *prev;
 
 protected:
     bool isCreated;
@@ -321,8 +361,7 @@ protected:
     Process *smallBrother;
     Process *son;
     Process *father;
-    
-    
+    u32      priority;
 
 public:
     Process(VirtualMachine *vm, const char *name);
@@ -333,8 +372,9 @@ public:
     void remove() override;
 
     void set_defaults();
-    void set_variable(const String &name, Value value);
+
     Instance instance;
+
 };
 
 struct Hook
@@ -352,6 +392,19 @@ void default_instance_pre_execute_hook(Instance *instance);
 void default_instance_pos_execute_hook(Instance *instance);
 void default_process_exec_hook(Instance *instance);
 
+
+struct NativeFunctionObject 
+{
+    NativeFunction func;
+    String name;
+    int arity;
+    NativeFunctionObject(NativeFunction func, const char *name, int arity);
+    int call(VirtualMachine *vm, int argc, Value *args);
+};
+
+
+
+
 class VirtualMachine
 {
     friend class Process;
@@ -364,9 +417,11 @@ class VirtualMachine
 
     Vector<Task *> taskes;
     HashTable<Task *> taskesMap;
+
     HashTable<NativeFunctionObject *> nativeFunctions;
-    Vector<FunctionObject*> scriptFunctions;
     HashTable<FunctionObject *> functionsMap;
+
+    Vector<Task *> processDeletor;
 
 
     Scope *global;
@@ -412,7 +467,7 @@ class VirtualMachine
 
     bool isGlobalScope();
 
-    List run_process;
+    Vector<Task*> run_process;
 
 
     
@@ -423,7 +478,7 @@ public:
     
     void Clear();
     
-    u8 Run();
+    bool Run();
     bool Compile(String source);
     bool IsReady();
     bool Update();
@@ -470,6 +525,9 @@ public:
     String pop_string();
     bool   pop_bool();
     bool   pop_nil();
+
+
+    size_t size() { return run_process.size(); }
 
     Hook hooks;
 };

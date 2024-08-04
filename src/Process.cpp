@@ -28,8 +28,10 @@ void Process::set_parent(Process *p)
 
 Process::Process(VirtualMachine *vm, const char *name) : Task(vm, name)
 {
-    type = ObjectType::OPROCESS;
-
+    type = TaskType::TPROCESS;
+    prev = nullptr;
+    next = nullptr;
+    priority  = 0;
     isCreated = false;
   
     instance.ID = ID;
@@ -43,7 +45,6 @@ Process::Process(VirtualMachine *vm, const char *name) : Task(vm, name)
     
 
 
-    mark();
    // INFO("Create process: %s", name);
 
 }
@@ -114,7 +115,6 @@ void Process::update()
 void Process::remove()
 {
     Done();
-    unmark();
     vm->hooks.instance_destroy_hook(&instance);
 }
 
@@ -143,22 +143,167 @@ void Process::set_defaults()
 
 }
 
-void Process::set_variable(const String &name, Value value)
+
+
+
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+
+ProcessList::ProcessList()
 {
-    // if (matchString("x",name.c_str(), name.length()))
-    // {
-    //     frames[0].slots[IX] = std::move(value);
-    // } else if (matchString("y",name.c_str(), name.length()))
-    // {
-    //     frames[0].slots[IY] = std::move(value);
-    // } else if (matchString("graph",name.c_str(), name.length()))
-    // {
-    //     frames[0].slots[IGRAPH] =  std::move(value);
-    // } else if (matchString("id",name.c_str(), name.length()))
-    // {
-    //     frames[0].slots[IID] =  std::move(value);
-    // }
+    head = nullptr;
+    tail = nullptr;
 }
+
+ProcessList::~ProcessList()
+{
+    Process *p = head;
+    while (p)
+    {
+        Process *next = p->next;
+        delete p;
+        p = next;
+    }
+
+    head = nullptr;
+    tail = nullptr;
+    m_count = 0;
+}
+
+Process *ProcessList::by_priority(u32 priority)
+{
+    Process *p = head;
+    while (p)
+    {
+        if (priority>=p->priority) return p;
+        p = p->next;
+    }
+    return nullptr;
+}
+
+Process *ProcessList::by_name(const char *name)
+{
+    Process *p = head;
+    while (p)
+    {
+        if(matchString(name, p->name.c_str(), p->name.length()))
+        {
+            return p;
+        }
+        p = p->next;
+    }
+    return nullptr;
+}
+
+void ProcessList::clear(bool freeData)
+{
+    Process *p = head;
+    while (p)
+    {
+        Process *next = p->next;
+        if (freeData)
+        {
+            delete p;
+        }
+        p = next;
+    }
+    head = nullptr;
+    tail = nullptr;
+    m_count = 0;
+}
+
+void ProcessList::add(Process *p)
+{
+    if (!p) return;
+
+    if (!head)
+    {
+        head = p;
+        tail = p;
+    }
+    else
+    {
+        p->prev = tail;
+        tail->next = p;
+        tail = p;
+    }
+
+    ++m_count;
+}
+
+void ProcessList::insert(Process *p)
+{
+    if (!p) return;
+    if (!head)
+    {
+        add(p);
+    }
+    else
+    {
+        Process *n = by_priority(p->priority);
+
+        if (!n)
+        {
+            add(p);
+        }
+        else
+        {
+            p->next = n;
+            p->prev = n->prev;
+            n->prev->next = p;
+            n->prev = p;
+        }
+    }
+
+    ++m_count;
+}
+
+Process* ProcessList::remove(Process *n)
+{
+    if (n == nullptr) return nullptr;
+
+    // Se o nó é o head
+    if (n == head)
+    {
+        head = n->next;
+        if (head != nullptr)
+        {
+            head->prev = nullptr;
+        }
+    }
+    else
+    {
+        n->prev->next = n->next;
+    }
+
+    // Se o nó é o tail
+    if (n == tail)
+    {
+        tail = n->prev;
+        if (tail != nullptr)
+        {
+            tail->next = nullptr;
+        }
+    }
+    else
+    {
+        if (n->next != nullptr)
+        {
+            n->next->prev = n->prev;
+        }
+    }
+
+    --m_count;
+    return n;
+
+}
+
+
+
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
+//***************************************************************************************************************** */
 
 void default_instance_create_hook(Instance *instance)
 {

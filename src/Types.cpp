@@ -478,17 +478,10 @@ StringObject::StringObject(int value)
 
 StringObject::~StringObject()
 {
-    INFO("Delete string: %s", string.c_str());
+  //  INFO("Delete string: %s", string.c_str());
 }
 
-NativeFunctionObject::NativeFunctionObject(NativeFunction func, const char *name, int arity) : func(func), name(name), arity(arity)
-{
-}
 
-int NativeFunctionObject::call(VirtualMachine *vm, int argc, Value *args)
-{
-    return func(vm, argc, args);
-}
 
 Chunk::Chunk(u32 capacity)
     :  m_capacity(capacity), count(0)
