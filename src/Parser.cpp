@@ -760,6 +760,8 @@ void Parser::processDeclaration()
     task->chunk = new Chunk(128);
     task->set_process();
     setTask(task);
+
+    //task->declareVariable(name.lexeme, true);
     
     scopeEnter();
 
@@ -782,7 +784,7 @@ void Parser::processDeclaration()
 
     consume(TokenType::LEFT_BRACE, "Expect '{' before process body.");
 
-
+ //   task->addConstString(rawName);
     block();
 
 
@@ -833,6 +835,9 @@ void Parser::statement()
     else if (match(TokenType::RETURN))
     {
         returnStatement();
+    } else if (match(TokenType::FRAME))
+    {
+        frameStatement();
     }
     else if (match(TokenType::PRINT))
     {
@@ -1164,7 +1169,9 @@ void Parser::returnStatement()
 void Parser::frameStatement()
 {
     consume(TokenType::SEMICOLON, "Expect ';' after 'frame'");
+    
     emitByte(OpCode::FRAME);
+    emitConstant(NUMBER(0));
 }
 
 void Parser::typeStatement()

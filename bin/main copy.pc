@@ -9,32 +9,31 @@ var minY=40;
 var gravity = 0.5;
 
 
+def fibonacci( n) 
+{
+    
+    if (n < 2) 
+    {
+         return n;
+    }
+
+   return fibonacci(n-2) + fibonacci(n-1); 
+}
 
 process bunny()
 {
-       
+   
     x = mouse_x();
     y = mouse_y();
-
-
     var speedX=rand()*8;
     var speedY=rand()*5 -2.5;
-    var life = 5;
-    var tmp=100;
+    var life=1000;
 
-    life =100;
-
-    graph=5;
-
-    
-    
     loop 
     {
 
-
     
-        life = life -1;
-
+        life= life -1;
         if (life<=0)
         {
             break;
@@ -43,15 +42,11 @@ process bunny()
         x = x + speedX;
         y = y + speedY;
 
-        text(x,y+40,20,life);
-
-
-
         speedY = speedY + gravity;
 
         if (x > maxX)
         {
-            speedX = speedX * -1;
+            speedX = speedX + -1;
             x = maxX;
         } elif(x<minX)
         {
@@ -73,11 +68,9 @@ process bunny()
             y=minY;
         }
 
-
-       frame;
-
-           
-    
+       
+      
+         
     }
 
 
@@ -85,23 +78,33 @@ process bunny()
 
 process game()
 {
-   
+    var i=0;
+    var down=true;
+    var nome ="GAME";
+ 
     loop 
     {   
 
        
         
-      if (mouse_press(0))
+      if (mouse_down(0))
       {
-       
+        if (down)
+        {
+            down =false;
             bunny();
-        
-      } 
-      frame;
+        }
+      } else
+       {
+        down=true;
+       }
+    if (mouse_down(1))
+      {
+            bunny();
+      }
 
     }
 }
-
 
 game();
 

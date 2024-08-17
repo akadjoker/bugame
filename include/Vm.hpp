@@ -107,7 +107,9 @@ static const int RUNNING = 0;
 static const int FINISHED = 1;
 static const int ABORTED = 2;
 static const int TERMINATED = 3;
-static const int OK = 4;
+static const int PAUSED = 4;
+
+static const int OK = 5;
 
 
 struct Scope 
@@ -173,103 +175,106 @@ private:
     int frameDepth;
 
     
+    double frame_counter;
+    clock_t last_frame_time;
 
- 
+    u8 state;
+    u8 frameStep;
 
+    int scopeDepth;
 
+    bool mainTask;
 
- int scopeDepth;
+    u8 argsCount;
 
- bool mainTask;
+    void beginScope();
+    void exitScope(int line);
 
- u8 argsCount;
+    // u8 read_byte();
+    // u16 read_short();
 
- void beginScope();
- void exitScope(int line);
+    u8 makeConstant(Value value);
+    void writeByte(u8 byte, int line);
+    void writeBytes(u8 byte1, u8 byte2, int line);
+    void writeConstant(Value value, int line);
 
- // u8 read_byte();
- // u16 read_short();
+    void writeConstantVar(const char *name, Value value, int line);
 
- u8 makeConstant(Value value);
- void writeByte(u8 byte, int line);
- void writeBytes(u8 byte1, u8 byte2, int line);
- void writeConstant(Value value, int line);
+    void disassembleCode(const char *name);
+    u32 disassembleInstruction(u32 offset);
+    u32 constantInstruction(const char *name, u32 offset);
+    u32 simpleInstruction(const char *name, u32 offset);
+    u32 byteInstruction(const char *name, u32 offset);
+    u32 jumpInstruction(const char *name, u32 sign, u32 offset);
+    u32 varInstruction(const char *name, u32 offset);
 
- void writeConstantVar(const char *name, Value value, int line);
+    u8 op_add();
+    u8 op_mod(int line);
+    u8 op_not_equal();
+    u8 op_less();
+    u8 op_greater();
+    u8 op_less_equal();
+    u8 op_greater_equal();
+    u8 op_xor();
 
- void disassembleCode(const char *name);
- u32 disassembleInstruction(u32 offset);
- u32 constantInstruction(const char *name, u32 offset);
- u32 simpleInstruction(const char *name, u32 offset);
- u32 byteInstruction(const char *name, u32 offset);
- u32 jumpInstruction(const char *name, u32 sign, u32 offset);
- u32 varInstruction(const char *name, u32 offset);
+protected:
+    String name;
+    u64 ID;
 
- u8 op_add();
- u8 op_mod(int line);
- u8 op_not_equal();
- u8 op_less();
- u8 op_greater();
- u8 op_less_equal();
- u8 op_greater_equal();
- u8 op_xor();
+    TaskType type;
 
- protected:
- String name;
- u64 ID;
+    int frameCount;
+    Local locals[UINT8_MAX];
+    int localCount;
+    Value stack[STACK_MAX];
+    Value *stackTop;
+    bool m_done;
+    Task *parent;
+    VirtualMachine *vm;
+    bool is_main;
+    bool isReturned;
+    Chunk *chunk;
+    Vector<Value> constants;
+    Frame frames[MAX_FRAMES];
 
- TaskType type;
+    int declareVariable(const String &string, bool isArg = false);
+    int addLocal(const char *name, u32 len, bool isArg = false);
+    int resolveLocal(const String &string);
+    bool setLocalVariable(const String &string, int index);
+    void set_process();
 
- int frameCount;
- Local locals[UINT8_MAX];
- int localCount;
- Value stack[STACK_MAX];
-  Value *stackTop;
- bool m_done;
- Task *parent;
- VirtualMachine *vm;
- bool is_main;
- bool isReturned;
- Chunk *chunk;
- Vector<Value> constants;
- Frame frames[MAX_FRAMES];
+    bool push(Value v);
+    Value pop();
+    Value peek(int offset = 0);
+    Value top();
+    void pop(u32 count);
+    void PrintStack();
 
- int declareVariable(const String &string, bool isArg = false);
- int addLocal(const char *name, u32 len, bool isArg = false);
- int resolveLocal(const String &string);
- bool setLocalVariable(const String &string, int index);
- void set_process();
+public:
+    Task(VirtualMachine *vm, const char *name);
+    virtual ~Task();
 
- bool push(Value v);
- Value pop();
- Value peek(int offset = 0);
- Value top();
- void pop(u32 count);
- void PrintStack();
+    void init_frames();
 
- public:
- Task(VirtualMachine *vm, const char *name);
- virtual ~Task();
+    u8 Pause();
 
- void init_frames();
+    u8 Run();
+    void write_byte(u8 byte, int line);
 
- u8 Run();
- void write_byte(u8 byte, int line);
+    u8 addConst(Value v);
+    u8 addConstString(const char *str);
+    u8 addConstNumber(double number);
 
- u8 addConst(Value v);
- u8 addConstString(const char *str);
- u8 addConstNumber(double number);
+    virtual void create() {};
+    virtual void remove() {};
+    virtual void update() {};
 
- virtual void create() {};
- virtual void remove() {};
- virtual void update() {};
+    bool IsDone();
+    void Done();
+    bool IsMain() const { return is_main; }
 
- bool IsDone();
- void Done();
- bool IsMain() const { return is_main; }
-
- static void *operator new(size_t size);
- static void operator delete(void *ptr, size_t size);
+    static void *operator new(size_t size);
+    static void operator delete(void *ptr, size_t size);
 
 
 };
@@ -291,6 +296,7 @@ const int IID    = 0;
 const int IGRAPH = 1;
 const int IX     = 2;
 const int IY     = 3;
+const int ITYPE     = 4;
 
 
 struct Instance 
@@ -370,6 +376,10 @@ public:
     void create() override;
     void update() override;
     void remove() override;
+
+    void start();
+    void end();
+    void render();
 
     void set_defaults();
 

@@ -130,7 +130,7 @@ int main_inter()
 
 
 
-    char *text = LoadTextFile("main.pc");
+    char *text = LoadTextFile("proc.pc");
     if (!text)
     {
         ERROR("Failed to load main.pc");
@@ -166,7 +166,10 @@ int main_inter()
         {
             while(vm.size() > 0)
             {
-             vm.Update();
+              if (!vm.Update())
+              {
+                break;
+              }
             }
         }
         

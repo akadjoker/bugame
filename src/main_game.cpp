@@ -36,8 +36,11 @@ void instance_destroy(Instance *instance)
 
 void process_exec(Instance *instance)
 {
-   //DrawCircle(instance->locals[IX], instance->locals[IY], 10, RED);
+   // DrawCircle(instance->locals[IX], instance->locals[IY], 10, RED);
     DrawTexture(bunnyTex, instance->locals[IX], instance->locals[IY],WHITE);
+
+  //  printf("update %f %f \n",instance->locals[IX], instance->locals[IY]);
+
     //INFO("Process exec instance: %s at %d %d %d", instance->name.c_str(), instance->locals[IX], instance->locals[IY], instance->locals[IGRAPH]);
 }
 
@@ -82,6 +85,30 @@ static int native_mouse_y(VirtualMachine *vm, int argc, Value *args)
 {
     vm->push(NUMBER((double)GetMouseY()));
     return 1;
+}
+
+static int native_text(VirtualMachine *vm, int argc, Value *args)
+{
+
+    if (argc < 3) return 0;
+    
+
+    int x =  AS_INTEGER(args[0]);
+    int y =  AS_INTEGER(args[1]);
+    int size =  AS_INTEGER(args[2]);
+
+
+        Value value = args[3];
+        if (IS_STRING(value))
+            DrawText(TextFormat("%s", AS_STRING(value)->string.c_str()), x, y,size, WHITE);
+        else if (IS_NUMBER(value))
+             DrawText(TextFormat("%g", AS_NUMBER(value)), x, y,size, WHITE);
+        else if (IS_BOOLEAN(value))
+            DrawText(TextFormat("%s", AS_BOOLEAN(value) ? "true" : "false"), x, y,size, WHITE);
+        else if (IS_NONE(value))
+            DrawText(TextFormat("none"), x, y,size, WHITE);
+    
+    return 0;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -240,6 +267,8 @@ bool done = false;
     vm.registerFunction("toInt", native_to_int, 1);
     vm.registerFunction("toString", native_to_string, 1);
   
+
+  vm.registerFunction("text", native_text, 4);
 
     vm.registerFunction("key_down", nave_key_down, 1);
     vm.registerFunction("key_press", nave_key_press, 1);

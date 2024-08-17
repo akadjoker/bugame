@@ -296,10 +296,22 @@ bool VirtualMachine::Update()
             }
          
         }
-        if (state == RUNNING)
+        if (state ==PAUSED)
         {
-            task->update();
+           // state = task->Pause();
+        // task->update();
+         //   printf("Paused\n");
+
+        }else   if (state == RUNNING)
+        {
+           
+           // task->render();
+
+          //  printf("Running\n");
         }
+         task->render();
+
+       
 
         task = next;
     }

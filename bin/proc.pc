@@ -1,0 +1,57 @@
+program teste;
+
+
+
+
+
+def fibonacci( n) 
+{
+    
+    if (n < 2) 
+    {
+         return n;
+    }
+
+   return fibonacci(n-2) + fibonacci(n-1); 
+}
+
+process bunny()
+{
+   
+    x = 100;
+    y = 250;
+
+
+    var speedX=8;
+    var speedY=5;
+    var life=1000;
+
+   print("--------------");
+  
+   print(life);//life 
+   print(speedX);
+   print(speedY);
+    loop 
+    {
+         print(life);//life 
+        print(speedX);
+        print(speedY);
+        break;
+    }
+
+
+    
+
+
+ print("*********************");
+  
+
+
+
+
+}
+
+bunny();
+bunny();
+
+print("exist");

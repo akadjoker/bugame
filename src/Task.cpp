@@ -182,16 +182,25 @@ bool Task::setLocalVariable(const String &string, int index)
 }
 void Task::set_process()
 {
+
  
     // addConstString("id");
     // addConstString("graph");
     // addConstString("x");
     // addConstString("y");
+    // addConstNumber(0);
+    // addConstNumber(0);
+    // addConstNumber(0);
+    // addConstNumber(0);
+    
+
 
     setLocalVariable("id", IID);
     setLocalVariable("graph", IGRAPH);
     setLocalVariable("x", IX);
     setLocalVariable("y", IY);
+ //   addConstString(name.c_str());
+  //  setLocalVariable("type", ITYPE);
 
      
 }
@@ -251,6 +260,12 @@ Task::Task(VirtualMachine *vm, const char *name)
     parent = nullptr;
     argsCount = 0;
     isReturned = false;
+
+    frame_counter = 0;
+    last_frame_time = clock();
+
+    state = RUNNING;
+    frameStep = RUNNING;
 
     this->name = name;
     constants.reserve(256);
@@ -687,13 +702,46 @@ void Task::Done()
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
 //***************************************************************************************************************** */
-static const size_t instructionsPerFrame = 25;
+static const size_t instructionsPerFrame = 30;
+static const u16 fps = 60;
+
+
+u8 Task::Pause()
+{
+     if (state == PAUSED) 
+     {
+        clock_t now = clock();
+        double elapsed = (double)(now - last_frame_time) / CLOCKS_PER_SEC * 1000;
+        double frame_duration = 1000 / fps;
+
+
+      //  printf("Elapsed: %f Frame duration: %f\n", elapsed, frame_duration);
+        
+        if (elapsed >= frame_counter * frame_duration) 
+        {
+            state = RUNNING;
+            frame_counter = 0;
+            last_frame_time = now;
+           // return RUNNING;
+        } else 
+        {
+            return PAUSED;
+        }
+    
+    }
+
+    return RUNNING;
+}
 
 u8 Task::Run()
 {
     
     if (PanicMode)         return ABORTED;
     if (isReturned)        return FINISHED;
+
+
+
+
 
  Frame* frame = &frames[frameCount - 1];        
 
@@ -705,32 +753,56 @@ u8 Task::Run()
 
     u32 instructionsExecuted=0;
 
+    
+     if (state == PAUSED) 
+     {
+        clock_t now = clock();
+        double elapsed = (double)(now - last_frame_time) / CLOCKS_PER_SEC * 1000;
+        double frame_duration = 1000 / fps;
+
+
+      //  printf("%s Elapsed: %f Frame duration: %f total: %f  %d\n",name.c_str(), elapsed, frame_duration,(frame_counter * frame_duration),*frame->ip);
+        
+        if (elapsed >= frame_counter * frame_duration) 
+        {
+            state = RUNNING;
+            frame_counter = 0;
+            last_frame_time = now;
+        } else 
+        {
+           state = PAUSED;
+           return PAUSED;
+        }
+     } 
+
+
 
      while (instructionsExecuted < instructionsPerFrame)
-     {
+   // for (;;)
+    {
 
-         u8 instruction = READ_BYTE();
-         int line = frame->task->chunk->lines[instruction];
+        u8 instruction = READ_BYTE();
+        int line = frame->task->chunk->lines[instruction];
 
-         switch ((OpCode)instruction)
-         {
-         case OpCode::CONST:
-         {
+        switch ((OpCode)instruction)
+        {
+        case OpCode::CONST:
+        {
 
-             Value value = READ_CONSTANT();
-             push(value);
+            Value value = READ_CONSTANT();
+            push(value);
 
-             break;
-         }
-         case OpCode::PUSH:
-         {
+            break;
+        }
+        case OpCode::PUSH:
+        {
 
-             Value value = READ_CONSTANT();
-             push(std::move(value));
-             break;
-         }
-         case OpCode::POP:
-         {
+            Value value = READ_CONSTANT();
+            push(std::move(value));
+            break;
+        }
+        case OpCode::POP:
+        {
             pop();
 
              
@@ -751,7 +823,8 @@ u8 Task::Run()
          {
              vm->Warning("Halt!");
              isReturned = true;
-             return ABORTED;
+             state = ABORTED;
+             return state;
          }
          case OpCode::PROGRAM:
          {
@@ -759,7 +832,8 @@ u8 Task::Run()
              if (!IS_STRING(constant))
              {
                  vm->Error("Program  name must be string [line %d]", line);
-                 return ABORTED;
+                state = ABORTED;
+                    return state;
              }
              break;
          }
@@ -796,7 +870,8 @@ u8 Task::Run()
              {
                  vm->Error("invalid  'subtract' operands [line %d]", line);
 
-                 return ABORTED;
+             state = ABORTED;
+             return state;
              }
 
              break;
@@ -1027,21 +1102,24 @@ u8 Task::Run()
                      vm->Error("Variable  ID is read-only");
                      return ABORTED;
                  }
+                 
              }
 
              frame->slots[slot] = peek(0);
 
-             //  printf("local get variable %d", slot);
-             //  printValue(frame->slots[slot]);
+            //   printf("local set variable %d", slot);
+          //     printValue(frame->slots[slot]);
 
              break;
          }
          case OpCode::LOCAL_GET:
          {
              u8 slot = READ_BYTE();
+           
 
-             // printValue(frame->slots[slot]);
-             // INFO("local get variable %d %s", slot,frame->task->name.c_str());
+           //  INFO("local get variable %d ", slot);
+           //  printValue(frame->slots[slot]);
+            
              push(frame->slots[slot]);
 
              break;
@@ -1110,6 +1188,7 @@ u8 Task::Run()
              stackTop -= (argCount + 1) + popResult;
              if (count > 0)
                  push(std::move(result));
+            
              break;
          }
          case OpCode::CALL_SCRIPT:
@@ -1161,6 +1240,7 @@ u8 Task::Run()
                  INFO("main %s", frame->task->name.c_str());
                  PrintStack();
                  pop();
+                 state = TERMINATED;
                  return TERMINATED;
              }
              //  INFO("return %s", frame->task->name.c_str());
@@ -1202,9 +1282,47 @@ u8 Task::Run()
              // INFO("Process CALL %s args %d chunk %d", name ,callTask->argsCount,callTask->chunk->count);
              Process *process = vm->AddProcess(name);
              process->chunk = new Chunk(callTask->chunk);
+            
+            
+             process->push(INTEGER(process->ID));
+             process->push(INTEGER(100));
+             process->push(NUMBER(2));
+             process->push(NUMBER(3));
+             process->push(NUMBER(3));
+
+      
+            
              process->init_frames();  // prepare frames 4 functions
-             process->set_defaults(); // local variables x,y, ... etc
+             process->frames[0].slots = process->stackTop - 4  -1 ;
+
+
+
+
+            
+            // process->set_defaults(); // local variables x,y, ... etc
              process->constants = callTask->constants;
+          //   process->constants.push_back(INTEGER(process->ID));
+            //  process->addConstNumber(0);
+            //  process->addConstNumber(1);
+            //  process->addConstNumber(2);
+            //  process->addConstNumber(3);
+           
+            // for (u32 i = 0; i < callTask->constants.size(); i++)
+            // {
+            //     process->constants.push_back(callTask->constants[i]);
+            // }
+            //  process->constants.push_back(STRING("pocess"));
+
+            // for (u32 i = 0; i < callTask->constants.size(); i++)
+            // {
+            //    // process->constants[i+1]=callTask->constants[i];
+            // }
+          //  process->constants.push_back(STRING("pocess"));
+       
+
+
+          //  process->push(NUMBER(3));
+
 
              for (int i = argCount - 1; i >= 0; i--)
              {
@@ -1212,12 +1330,14 @@ u8 Task::Run()
                  process->push(arg);
              }
              pop(argCount+1);
+           
 
-         
+            
+
 
              frame->slots = stackTop - argCount - 1;
-             // callTask->disassembleCode(name);
-             // process->disassembleCode(name);
+               callTask->disassembleCode(name);
+             //   process->disassembleCode(name);
              if (this->type == TaskType::TPROCESS)
              {
                  process->set_parent(static_cast<Process *>(this));
@@ -1226,9 +1346,12 @@ u8 Task::Run()
             // vm->run_process.push_back(process);
              vm->processList.add(process);
              push(INTEGER((int)process->ID));
+             process->set_defaults(); // local variables x,y, ... etc
+
+            // process->render();
 
              // PrintStack();
-             break;
+             return RUNNING;
          }
          case OpCode::RETURN_PROCESS:
          {
@@ -1243,15 +1366,27 @@ u8 Task::Run()
              }
 
              // PrintStack();
-
+             state = TERMINATED;
              return TERMINATED;
          }
 
          case OpCode::FRAME:
          {
-             INFO("FRAME %s", name.c_str());
+                Value constant = pop();
+                double frame_value = AS_NUMBER(constant);
 
-             break;
+                if (frame_value > 1) frame_value = 1;
+                if (frame_value < 0) frame_value = 0;
+
+                frame_counter = 0.01;
+                last_frame_time = clock();
+                Process *process = static_cast<Process *>(frame->task);
+                process->create();
+
+
+                state = PAUSED;
+                return state;
+
          }
          case OpCode::CLONE:
          {
@@ -1268,13 +1403,9 @@ u8 Task::Run()
          default:
          {
              vm->Error(" %s running %d with unknown '%d' opcode frame %d", name.c_str(), frame->ip, (int)instruction, frameCount);
-
+             state = ABORTED;
              return ABORTED;
          }
-         }
-
-         if (type == TaskType::TPROCESS)
-         {
          }
 
            //  INFO("RUN %s executed %d", name.c_str(),instructionsExecuted);
@@ -1282,14 +1413,16 @@ u8 Task::Run()
          instructionsExecuted++;
          if (instructionsExecuted >= instructionsPerFrame)
          {
-             return RUNNING;            
+             state = RUNNING;
+             return RUNNING;
          }
+       // state = RUNNING;
+      //  return state;
 
      }
 
 
- //  return RUNNING;
-     return FINISHED;
+return FINISHED;
 
 #undef READ_BYTE
 #undef READ_SHORT

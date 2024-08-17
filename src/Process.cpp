@@ -65,51 +65,13 @@ void Process::create()
 
 void Process::update()
 {
-    if (!isCreated) 
-    {
-       
-    }
-    // local->read("x", x);
-    // local->read("y", y);
-    // local->read("graph", graph);
-
-
-    instance.locals[IX]     =   stack[IX].number;
-    instance.locals[IY]     =   stack[IY].number;
-    instance.locals[IGRAPH] =   stack[IGRAPH].number;
-    //instance.locals[IGRAPH] = static_cast<s32>(AS_NUMBER(graph));
-    vm->hooks.instance_pre_execute_hook(&instance);
-
-
-
-
-
-   //printf("Process: %d\n", frames);
-   if ( !isCreated)
-   {
-        create();
-        return;
-   }
-
-    if (!isCreated) return;
-
-
     
 
+  //  start();
 
 
-
-    vm->hooks.process_exec_hook(&instance);
-
-
-    stack[IX].number = instance.locals[IX];
-    stack[IY].number = instance.locals[IY];
-    stack[IGRAPH].number = instance.locals[IGRAPH];
-
-
-    vm->hooks.instance_pos_execute_hook(&instance);
-   
-   
+  //  render();
+  //  end();
 }
 
 void Process::remove()
@@ -118,28 +80,62 @@ void Process::remove()
     vm->hooks.instance_destroy_hook(&instance);
 }
 
+void Process::start()
+{
+    instance.locals[IX]     =   stack[IX].number;
+    instance.locals[IY]     =   stack[IY].number;
+    instance.locals[IGRAPH] =   stack[IGRAPH].number;
+
+    vm->hooks.instance_pre_execute_hook(&instance);
+
+
+}
+
+void Process::end()
+{
+    stack[IX].number = instance.locals[IX];
+    stack[IY].number = instance.locals[IY];
+    stack[IGRAPH].number = instance.locals[IGRAPH];
+    vm->hooks.instance_pos_execute_hook(&instance);   
+
+
+}
+
+void Process::render()
+{
+
+    if (!isCreated)        return;
+
+    start();
+    vm->hooks.process_exec_hook(&instance);
+    end();
+}
+
 void Process::set_defaults()
 {
-    // addConstString("id");
-    // addConstString("graph");
-    // addConstString("x");
-    // addConstString("y");
+     // addConstString("id");
+    //  addConstString("graph");
+     // addConstString("x");
+    //  addConstString("y");
+    //  addConstString("tmp");
     //angle, father, file, flags, graph, xgraph, region, resolution, size, son, x, y, z, ctype, cnumber, priority
 
-    push(INTEGER(ID));
-    push(INTEGER(2));
-    push(NUMBER(3));
-    push(NUMBER(4));
-
-    setLocalVariable("id", IID);
-    setLocalVariable("graph", IGRAPH);
-    setLocalVariable("x", IX);
-    setLocalVariable("y", IY);
+//    push(INTEGER(ID));
+//    push(INTEGER(0));
+//    push(INTEGER(0));
+//    push(INTEGER(ID));
+  //  push(NUMBER(1));
+   
+    // setLocalVariable("id", IID);
+    // setLocalVariable("graph", IGRAPH);
+    // setLocalVariable("x", IX);
+    // setLocalVariable("y", IY);
 
 
     instance.locals[IX]     =   stack[IX].number;
     instance.locals[IY]     =   stack[IY].number;
     instance.locals[IGRAPH] =   stack[IGRAPH].number;
+    instance.locals[IID]    =   stack[IID].number;
 
 }
 
